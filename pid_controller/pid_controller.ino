@@ -11,104 +11,142 @@
 */
 
 // pin config
-#define MOTOR1INA 22
-#define MOTOR1INB 24
-#define MOTOR1EN 6
-#define MOTOR1ENCA 18
-#define MOTOR1ENCB 43
+// #define MOTOR1INA 22
+// #define MOTOR1INB 24
+// #define MOTOR1EN 6
+// #define MOTOR1ENCA 18
+// #define MOTOR1ENCB 43
 
-#define MOTOR2INA 26
-#define MOTOR2INB 28
-#define MOTOR2EN 5
-#define MOTOR2ENCA 21
-#define MOTOR2ENCB 51
+// #define MOTOR2INA 26
+// #define MOTOR2INB 28
+// #define MOTOR2EN 5
+// #define MOTOR2ENCA 21
+// #define MOTOR2ENCB 51
 
-#define MOTOR3INA 30
-#define MOTOR3INB 32
-#define MOTOR3EN 7
-#define MOTOR3ENCA 3
-#define MOTOR3ENCB 42
+// #define MOTOR3INA 30
+// #define MOTOR3INB 32
+// #define MOTOR3EN 7
+// #define MOTOR3ENCA 3
+// #define MOTOR3ENCB 42
 
-#define MOTOR4INA 34
-#define MOTOR4INB 36
-#define MOTOR4EN 8
-#define MOTOR4ENCA 2
-#define MOTOR4ENCB 48
+// #define MOTOR4INA 34
+// #define MOTOR4INB 36
+// #define MOTOR4EN 8
+// #define MOTOR4ENCA 2
+// #define MOTOR4ENCB 48
 
-int pos = 0;
+#include <util/atomic.h>
+
+#define NUMMOTORS 4
+const int in1[] = {22, 26, 30, 34};
+const int in2[] = {24, 28, 32, 36};
+const int en[] = {6, 5, 7, 8};
+const int enca[] = {18, 21, 3, 2};
+const int encb[] = {43, 51, 42, 48};
+
+// globals
 long prev_t = 0;
-float e_prev = 0;
-float e_integral = 0;
+volatile int pos[] = {0, 0, 0, 0};
+
+class Controller {
+  private:
+    float kp, kd, ki, umax;
+    float e_prev, e_integral;
+  public:
+    Controller() : kp(1), kd(0), ki(0), umax(255), e_prev(0.0), e_integral(0.0){}
+
+  void setParams(float kp_new, float kd_new, float ki_new, float umax_new) {
+    kp = kp_new;
+    kd = kd_new;
+    ki = ki_new;
+    umax = umax_new;
+  }
+
+  void getSignal(int value, int target, float dt, int &pwr, int &dir) {
+    // error
+    int e = target - value;
+
+      // derivative
+    float dedt = (e-e_prev)/(dt);
+
+    // integral
+    e_integral = e_integral + e*dt;
+
+    // control signal
+    float u = kp*e + kd*dedt + ki*e_integral;
+
+    // motor power
+    pwr = (int) fabs(u);
+    if (pwr > umax) {
+      pwr = umax;
+    }
+
+    // motor direction
+    dir = 1;
+    if (u < 0) {
+      dir = -1;
+    }
+
+    e_prev = e;
+  }
+};
+
+Controller controller[NUMMOTORS];
 
 void setup() {
   Serial.begin(9600);
-  pinMode(MOTOR4INA, OUTPUT);
-  pinMode(MOTOR4INB, OUTPUT);
-  pinMode(MOTOR4EN, OUTPUT);
-  pinMode(MOTOR4ENCA,INPUT);
-  pinMode(MOTOR4ENCB,INPUT);
-  attachInterrupt(digitalPinToInterrupt(MOTOR4ENCA), readEncoder, RISING);
+
+  for (int i = 0; i < NUMMOTORS; i++) {
+    pinMode(in1[i], OUTPUT);
+    pinMode(in2[i], OUTPUT);
+    pinMode(en[i], OUTPUT);
+    pinMode(enca[i],INPUT);
+    pinMode(encb[i],INPUT);
+
+    controller[i].setParams(6, 1, 0.05, 255);
+  }
+
+  attachInterrupt(digitalPinToInterrupt(enca[0]), readEncoder<0>, RISING);
+  attachInterrupt(digitalPinToInterrupt(enca[1]), readEncoder<1>, RISING);
+  attachInterrupt(digitalPinToInterrupt(enca[2]), readEncoder<2>, RISING);
+  attachInterrupt(digitalPinToInterrupt(enca[3]), readEncoder<3>, RISING);
 }
 
 void loop() {
 
-  // PID constants
-  float kp = 6;
-  float kd = 1;
-  float ki = 0.05;
+  // targets
+  int target[NUMMOTORS];
+  target[0] = 750*sin(prev_t/1e6);
+  target[1] = 750*sin(prev_t/1e6);
+  target[2] = 750*sin(prev_t/1e6);
+  target[3] = 750*sin(prev_t/1e6);
 
-  // delta t
   long curr_t = micros();
-  float dt = ((float)(curr_t-prev_t))/1.0e6;
+  float dt = ((float) (curr_t - prev_t))/(1.0e6);
   prev_t = curr_t;
 
-  // target
-
-  // float t = curr_t * 1e-6;
-  // float freq = 0.25;
-  // float omega = 2 * PI * freq;
-  // int target = (int)(600 * cos(omega * t));
-  int target = 1200;
-
-
-  // error
-  int e = target - pos;
-
-  // derivative
-  float dedt = (e-e_prev)/(dt);
-
-  // integral
-  e_integral = e_integral + e*dt;
-
-  // control signal
-  float u = kp*e + kd*dedt + ki*e_integral;
-
-  // motor power
-  float pwr = fabs(u);
-  if (pwr > 255) {
-    pwr = 255;
+  int posi[NUMMOTORS];
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    for (int i = 0; i < NUMMOTORS; i++) {
+      posi[i] = pos[i];
+    }
   }
 
-  // motor direction
-  int dir = 1;
-  if (u < 0) {
-    dir = -1;
+  for (int i = 0; i < NUMMOTORS; i++) {
+    int pwr, dir;
+    controller[i].getSignal(posi[i], target[i], dt, pwr, dir);
+    setMotor(dir, pwr, en[i], in1[i], in2[i]);
   }
 
-  // signal the motor
-  setMotor(dir, pwr, MOTOR4EN, MOTOR4INA, MOTOR4INB);
+  for (int i = 0; i < NUMMOTORS; i++) {
+    Serial.print(target[i]);
+    Serial.print(" ");
+    Serial.print(posi[i]);
+    Serial.print(" ");
+  }
+  Serial.println();
 
-  e_prev = e;
-
-  Serial.print(0);
-  Serial.print(" ");
-  Serial.print(target);
-  Serial.print(" ");
-  Serial.print(pos);
-  Serial.print(" ");
-  Serial.println(1200);
-
-}
+} 
 
 void setMotor(int dir, int pwm_val, int en, int ina, int inb ){
   analogWrite(en, pwm_val);
@@ -124,11 +162,12 @@ void setMotor(int dir, int pwm_val, int en, int ina, int inb ){
   }
 }
 
+template <int j>
 void readEncoder() {
-  int b = digitalRead(MOTOR4ENCB);
+  int b = digitalRead(encb[j]);
   if (b>0) {
-    pos++;
+    pos[j]++;
   } else {
-    pos--;
+    pos[j]--;
   }
 }
