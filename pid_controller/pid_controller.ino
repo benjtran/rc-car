@@ -48,6 +48,39 @@ const int encb[] = {43, 51, 42, 48};
 long prev_t = 0;
 volatile int pos[] = {0, 0, 0, 0};
 
+// targets
+float target_f[] = {0.0, 0.0, 0.0, 0.0};
+long target[] = {0, 0, 0, 0};
+
+void setTarget(float t, float dt) {
+  float position_change[4] = {0.0, 0.0, 0.0, 0.0};
+  float pulses_per_turn = 508;
+  float pulses_per_meter = pulses_per_turn * 4.75089382365;
+
+  t = fmod(t, 12);
+  float velocity = 0.25;
+
+  if (t < 4) {
+     
+  } else if (t < 5.2) {
+    for (int i = 0; i < 4; i++) {
+      position_change[i] = velocity * dt * pulses_per_meter;
+    }
+  } else if (t < 6.4) {
+    for (int i = 0; i < 4; i++) {
+      position_change[i] = -velocity * dt * pulses_per_meter;
+    }
+  }
+
+  for (int i = 0; i < 4; i++) {
+    target_f[i] = target_f[i] + position_change[i];
+  }
+  target[0] = (long) target_f[0];
+  target[1] = (long) target_f[1];
+  target[2] = (long) target_f[2];
+  target[3] = (long) target_f[3];
+}
+
 class Controller {
   private:
     float kp, kd, ki, umax;
@@ -102,9 +135,12 @@ void setup() {
     pinMode(en[i], OUTPUT);
     pinMode(enca[i],INPUT);
     pinMode(encb[i],INPUT);
-
-    controller[i].setParams(6, 1, 0.05, 255);
   }
+
+  controller[0].setParams(3, 0.5, 0.03, 255);
+  controller[1].setParams(3, 0.5, 0.03, 255);
+  controller[2].setParams(3, 0.5, 0.03, 255);
+  controller[3].setParams(3, 0.5, 0.03, 255);
 
   attachInterrupt(digitalPinToInterrupt(enca[0]), readEncoder<0>, RISING);
   attachInterrupt(digitalPinToInterrupt(enca[1]), readEncoder<1>, RISING);
@@ -114,16 +150,12 @@ void setup() {
 
 void loop() {
 
-  // targets
-  int target[NUMMOTORS];
-  target[0] = 750*sin(prev_t/1e6);
-  target[1] = 750*sin(prev_t/1e6);
-  target[2] = 750*sin(prev_t/1e6);
-  target[3] = 750*sin(prev_t/1e6);
-
   long curr_t = micros();
   float dt = ((float) (curr_t - prev_t))/(1.0e6);
   prev_t = curr_t;
+
+    // targets
+  setTarget(curr_t/1.0e6, dt);
 
   int posi[NUMMOTORS];
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
