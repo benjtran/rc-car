@@ -37,3 +37,15 @@ cd ~/catkin_ws
 source devel/setup.bash
 roslaunch hector_slam_launch tutorial.launch
 ```
+
+6. Enter fourth container:
+```bash
+sudo docker exec -it hector_ros bash 
+```
+7. Start motor interface:
+```bash
+source /opt/ros/noetic/setup.bash
+cd ~/catkin_ws
+source devel/setup.bash
+roslaunch robot_control control.launch
+```
