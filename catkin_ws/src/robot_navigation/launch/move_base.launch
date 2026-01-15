@@ -1,0 +1,10 @@
+<launch>
+
+  <rosparam file="$(find robot_navigation)/config/costmap_common.yaml" command="load"/>
+  <rosparam file="$(find robot_navigation)/config/global_costmap.yaml" command="load"/>
+  <rosparam file="$(find robot_navigation)/config/local_costmap.yaml" command="load"/>
+
+  <node pkg="move_base" type="move_base" name="move_base" output="screen"/>
+
+</launch>
+

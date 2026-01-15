@@ -1,0 +1,11 @@
+<launch>
+
+    <!-- Motor interface node -->
+    <node
+        name="motor_interface"
+        pkg="robot_control"
+        type="motor_interface.py"
+        output="screen">
+    </node>
+
+</launch>
