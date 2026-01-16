@@ -1,6 +1,9 @@
 /*
 
 4 wheel drive PID control
+- Recieves velocity commands from motor interface node via serial
+- Translates velocity -> encoder counts
+- Controls motors using PID drive
 
   MOTOR LAYOUT:
   1 0-------0 2
@@ -9,31 +12,6 @@
   3 0-------0 4
 
 */
-
-// pin config
-// #define MOTOR1INA 22
-// #define MOTOR1INB 24
-// #define MOTOR1EN 6
-// #define MOTOR1ENCA 18
-// #define MOTOR1ENCB 43
-
-// #define MOTOR2INA 26
-// #define MOTOR2INB 28
-// #define MOTOR2EN 5
-// #define MOTOR2ENCA 21
-// #define MOTOR2ENCB 51
-
-// #define MOTOR3INA 30
-// #define MOTOR3INB 32
-// #define MOTOR3EN 7
-// #define MOTOR3ENCA 3
-// #define MOTOR3ENCB 42
-
-// #define MOTOR4INA 34
-// #define MOTOR4INB 36
-// #define MOTOR4EN 8
-// #define MOTOR4ENCA 2
-// #define MOTOR4ENCB 48
 
 #include <util/atomic.h>
 
@@ -52,24 +30,13 @@ volatile int pos[] = {0, 0, 0, 0};
 float target_f[] = {0.0, 0.0, 0.0, 0.0};
 long target[] = {0, 0, 0, 0};
 
-void setTarget(float t, float dt) {
+void setTarget(float t, float dt,  float vel) {
   float position_change[4] = {0.0, 0.0, 0.0, 0.0};
   float pulses_per_turn = 508;
   float pulses_per_meter = pulses_per_turn * 4.75089382365;
 
-  t = fmod(t, 8);
-  float velocity = 0.25;
-
-  if (t < 4) {
-     
-  } else if (t < 5.2) {
-    for (int i = 0; i < 4; i++) {
-      position_change[i] = velocity * dt * pulses_per_meter;
-    }
-  } else if (t < 6.7 && t > 5.5) {
-    for (int i = 0; i < 4; i++) {
-      position_change[i] = -velocity * dt * pulses_per_meter;
-    }
+  for (int i = 0; i < NUMMOTORS; i++) {
+   position_change[i] = vel * dt * pulses_per_meter; 
   }
 
   for (int i = 0; i < 4; i++) {
@@ -149,19 +116,25 @@ void setup() {
 }
 
 void loop() {
+  float vel = 0.0;
+  if (Serial.available() > 0) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    vel = command.toFloat();
+    Serial.print("Recieved velocity: ");
+    Serial.println(vel, 4);
+  }
 
   long curr_t = micros();
   float dt = ((float) (curr_t - prev_t))/(1.0e6);
   prev_t = curr_t;
 
-    // targets
-  setTarget(curr_t/1.0e6, dt);
+  // targets
+  setTarget(curr_t/1.0e6, dt, vel);
 
   int posi[NUMMOTORS];
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    for (int i = 0; i < NUMMOTORS; i++) {
-      posi[i] = pos[i];
-    }
+  for (int i = 0; i < NUMMOTORS; i++) {
+    posi[i] = pos[i];
   }
 
   for (int i = 0; i < NUMMOTORS; i++) {
@@ -170,14 +143,13 @@ void loop() {
     setMotor(dir, pwr, en[i], in1[i], in2[i]);
   }
 
-  for (int i = 0; i < NUMMOTORS; i++) {
-    Serial.print(target[i]);
-    Serial.print(" ");
-    Serial.print(posi[i]);
-    Serial.print(" ");
-  }
-  Serial.println();
-
+  // for (int i = 0; i < NUMMOTORS; i++) {
+  //   Serial.print(target[i]);
+  //   Serial.print(" ");
+  //   Serial.print(posi[i]);
+  //   Serial.print(" ");
+  // }
+  // Serial.println();
 } 
 
 void setMotor(int dir, int pwm_val, int en, int ina, int inb ){
