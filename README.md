@@ -22,7 +22,7 @@ sudo docker exec -it hector_ros bash
 4. Launch rplidar:
 ```bash
 source /opt/ros/noetic/setup.bash
-cd ~/catkin_ws
+cd ~/rc-car/catkin_ws
 source devel/setup.bash
 roslaunch rplidar_ros view_rplidar_c1.launch
 ```
@@ -33,11 +33,10 @@ sudo docker exec -it hector_ros bash
 6. Launch SLAM:
 ```bash
 source /opt/ros/noetic/setup.bash
-cd ~/catkin_ws
+cd ~/rc-car/catkin_ws
 source devel/setup.bash
 roslaunch hector_slam_launch tutorial.launch
 ```
-
 6. Enter fourth container:
 ```bash
 sudo docker exec -it hector_ros bash 
@@ -45,7 +44,18 @@ sudo docker exec -it hector_ros bash
 7. Start motor interface:
 ```bash
 source /opt/ros/noetic/setup.bash
-cd ~/catkin_ws
+cd ~/rc-car/catkin_ws
 source devel/setup.bash
-roslaunch robot_control control.launch
+rosrun robot_control motor_interface_node.py 
+```
+8. Enter fifth container:
+```bash
+sudo docker exec -it hector_ros bash 
+```
+9. Start path planning:
+```bash
+source /opt/ros/noetic/setup.bash
+cd ~/rc-car/catkin_ws
+source devel/setup.bash
+rosrun robot_navigation path_planner_node.py 
 ```
