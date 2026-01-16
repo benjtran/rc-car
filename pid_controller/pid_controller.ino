@@ -57,7 +57,7 @@ void setTarget(float t, float dt) {
   float pulses_per_turn = 508;
   float pulses_per_meter = pulses_per_turn * 4.75089382365;
 
-  t = fmod(t, 12);
+  t = fmod(t, 8);
   float velocity = 0.25;
 
   if (t < 4) {
@@ -66,7 +66,7 @@ void setTarget(float t, float dt) {
     for (int i = 0; i < 4; i++) {
       position_change[i] = velocity * dt * pulses_per_meter;
     }
-  } else if (t < 6.4) {
+  } else if (t < 6.7 && t > 5.5) {
     for (int i = 0; i < 4; i++) {
       position_change[i] = -velocity * dt * pulses_per_meter;
     }
@@ -137,10 +137,10 @@ void setup() {
     pinMode(encb[i],INPUT);
   }
 
-  controller[0].setParams(3, 0.5, 0.03, 255);
-  controller[1].setParams(3, 0.5, 0.03, 255);
-  controller[2].setParams(3, 0.5, 0.03, 255);
-  controller[3].setParams(3, 0.5, 0.03, 255);
+  controller[0].setParams(2, 0.1, 0, 255);
+  controller[1].setParams(2, 0.1, 0, 255);
+  controller[2].setParams(2, 0.1, 0, 255);
+  controller[3].setParams(2, 0.1, 0, 255);
 
   attachInterrupt(digitalPinToInterrupt(enca[0]), readEncoder<0>, RISING);
   attachInterrupt(digitalPinToInterrupt(enca[1]), readEncoder<1>, RISING);
