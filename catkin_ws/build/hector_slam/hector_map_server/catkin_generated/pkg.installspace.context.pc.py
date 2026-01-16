@@ -4,5 +4,5 @@ PROJECT_PKG_CONFIG_INCLUDE_DIRS = "".split(';') if "" != "" else []
 PROJECT_CATKIN_DEPENDS = "roscpp;hector_map_tools;hector_marker_drawing;hector_nav_msgs;nav_msgs;tf".replace(';', ' ')
 PKG_CONFIG_LIBRARIES_WITH_PREFIX = "".split(';') if "" != "" else []
 PROJECT_NAME = "hector_map_server"
-PROJECT_SPACE_DIR = "/root/catkin_ws/install"
+PROJECT_SPACE_DIR = "/root/rc-car/catkin_ws/install"
 PROJECT_VERSION = "0.5.2"

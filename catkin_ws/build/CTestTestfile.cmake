@@ -1,6 +1,6 @@
 # CMake generated Testfile for 
-# Source directory: /root/catkin_ws/src
-# Build directory: /root/catkin_ws/build
+# Source directory: /root/rc-car/catkin_ws/src
+# Build directory: /root/rc-car/catkin_ws/build
 # 
 # This file includes the relevant testing commands required for 
 # testing this directory and lists subdirectories to be tested as well.
@@ -14,6 +14,7 @@ subdirs("hector_slam/hector_geotiff")
 subdirs("hector_slam/hector_geotiff_plugins")
 subdirs("hector_slam/hector_marker_drawing")
 subdirs("robot_control")
+subdirs("robot_navigation")
 subdirs("hector_slam/hector_compressed_map_transport")
 subdirs("rplidar_ros")
 subdirs("hector_slam/hector_imu_attitude_to_tf")

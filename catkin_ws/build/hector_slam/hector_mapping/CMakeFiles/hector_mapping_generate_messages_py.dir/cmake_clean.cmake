@@ -1,9 +1,9 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/msg/_HectorDebugInfo.py"
-  "/root/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/msg/_HectorIterData.py"
-  "/root/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/msg/__init__.py"
-  "/root/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/srv/_ResetMapping.py"
-  "/root/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/srv/__init__.py"
+  "/root/rc-car/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/msg/_HectorDebugInfo.py"
+  "/root/rc-car/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/msg/_HectorIterData.py"
+  "/root/rc-car/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/msg/__init__.py"
+  "/root/rc-car/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/srv/_ResetMapping.py"
+  "/root/rc-car/catkin_ws/devel/lib/python3/dist-packages/hector_mapping/srv/__init__.py"
   "CMakeFiles/hector_mapping_generate_messages_py"
 )
 

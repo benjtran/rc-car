@@ -706,9 +706,9 @@ vector
 time.h
 -
 
-/root/catkin_ws/src/rplidar_ros/src/client.cpp
+/root/rc-car/catkin_ws/src/rplidar_ros/src/client.cpp
 ros/ros.h
-/root/catkin_ws/src/rplidar_ros/src/ros/ros.h
+/root/rc-car/catkin_ws/src/rplidar_ros/src/ros/ros.h
 sensor_msgs/LaserScan.h
-/root/catkin_ws/src/rplidar_ros/src/sensor_msgs/LaserScan.h
+/root/rc-car/catkin_ws/src/rplidar_ros/src/sensor_msgs/LaserScan.h
 

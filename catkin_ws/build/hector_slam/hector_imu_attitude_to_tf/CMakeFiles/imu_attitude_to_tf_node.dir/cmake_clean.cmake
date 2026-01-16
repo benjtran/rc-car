@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_imu_attitude_to_tf/imu_attitude_to_tf_node"
-  "/root/catkin_ws/devel/lib/hector_imu_attitude_to_tf/imu_attitude_to_tf_node.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_imu_attitude_to_tf/imu_attitude_to_tf_node"
+  "/root/rc-car/catkin_ws/devel/lib/hector_imu_attitude_to_tf/imu_attitude_to_tf_node.pdb"
   "CMakeFiles/imu_attitude_to_tf_node.dir/src/imu_attitude_to_tf_node.cpp.o"
 )
 

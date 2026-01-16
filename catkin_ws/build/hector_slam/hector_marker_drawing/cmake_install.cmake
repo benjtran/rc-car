@@ -1,8 +1,8 @@
-# Install script for directory: /root/catkin_ws/src/hector_slam/hector_marker_drawing
+# Install script for directory: /root/rc-car/catkin_ws/src/hector_slam/hector_marker_drawing
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "/root/catkin_ws/install")
+  set(CMAKE_INSTALL_PREFIX "/root/rc-car/catkin_ws/install")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -38,21 +38,21 @@ if(NOT DEFINED CMAKE_CROSSCOMPILING)
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/root/catkin_ws/build/hector_slam/hector_marker_drawing/catkin_generated/installspace/hector_marker_drawing.pc")
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/root/rc-car/catkin_ws/build/hector_slam/hector_marker_drawing/catkin_generated/installspace/hector_marker_drawing.pc")
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/hector_marker_drawing/cmake" TYPE FILE FILES
-    "/root/catkin_ws/build/hector_slam/hector_marker_drawing/catkin_generated/installspace/hector_marker_drawingConfig.cmake"
-    "/root/catkin_ws/build/hector_slam/hector_marker_drawing/catkin_generated/installspace/hector_marker_drawingConfig-version.cmake"
+    "/root/rc-car/catkin_ws/build/hector_slam/hector_marker_drawing/catkin_generated/installspace/hector_marker_drawingConfig.cmake"
+    "/root/rc-car/catkin_ws/build/hector_slam/hector_marker_drawing/catkin_generated/installspace/hector_marker_drawingConfig-version.cmake"
     )
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/hector_marker_drawing" TYPE FILE FILES "/root/catkin_ws/src/hector_slam/hector_marker_drawing/package.xml")
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/hector_marker_drawing" TYPE FILE FILES "/root/rc-car/catkin_ws/src/hector_slam/hector_marker_drawing/package.xml")
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/hector_marker_drawing" TYPE DIRECTORY FILES "/root/catkin_ws/src/hector_slam/hector_marker_drawing/include/hector_marker_drawing/" FILES_MATCHING REGEX "/[^/]*\\.h$" REGEX "/\\.svn$" EXCLUDE)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/hector_marker_drawing" TYPE DIRECTORY FILES "/root/rc-car/catkin_ws/src/hector_slam/hector_marker_drawing/include/hector_marker_drawing/" FILES_MATCHING REGEX "/[^/]*\\.h$" REGEX "/\\.svn$" EXCLUDE)
 endif()
 

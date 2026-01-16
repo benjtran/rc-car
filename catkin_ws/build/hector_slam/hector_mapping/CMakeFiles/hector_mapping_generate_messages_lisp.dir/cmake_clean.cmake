@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_mapping/msg/HectorDebugInfo.lisp"
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_mapping/msg/HectorIterData.lisp"
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_mapping/srv/ResetMapping.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_mapping/msg/HectorDebugInfo.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_mapping/msg/HectorIterData.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_mapping/srv/ResetMapping.lisp"
   "CMakeFiles/hector_mapping_generate_messages_lisp"
 )
 

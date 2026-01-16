@@ -1,2 +1,2 @@
 - setup-file:
-    local-name: /root/catkin_ws/install/setup.sh
+    local-name: /root/rc-car/catkin_ws/install/setup.sh

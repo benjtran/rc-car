@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/libhector_geotiff_plugins.pdb"
-  "/root/catkin_ws/devel/lib/libhector_geotiff_plugins.so"
+  "/root/rc-car/catkin_ws/devel/lib/libhector_geotiff_plugins.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/libhector_geotiff_plugins.so"
   "CMakeFiles/hector_geotiff_plugins.dir/src/trajectory_geotiff_plugin.cpp.o"
 )
 

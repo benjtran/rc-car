@@ -1,8 +1,8 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/share/roseus/ros/hector_mapping/manifest.l"
-  "/root/catkin_ws/devel/share/roseus/ros/hector_mapping/msg/HectorDebugInfo.l"
-  "/root/catkin_ws/devel/share/roseus/ros/hector_mapping/msg/HectorIterData.l"
-  "/root/catkin_ws/devel/share/roseus/ros/hector_mapping/srv/ResetMapping.l"
+  "/root/rc-car/catkin_ws/devel/share/roseus/ros/hector_mapping/manifest.l"
+  "/root/rc-car/catkin_ws/devel/share/roseus/ros/hector_mapping/msg/HectorDebugInfo.l"
+  "/root/rc-car/catkin_ws/devel/share/roseus/ros/hector_mapping/msg/HectorIterData.l"
+  "/root/rc-car/catkin_ws/devel/share/roseus/ros/hector_mapping/srv/ResetMapping.l"
   "CMakeFiles/hector_mapping_generate_messages_eus"
 )
 

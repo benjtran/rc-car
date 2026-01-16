@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/include/hector_mapping/HectorDebugInfo.h"
-  "/root/catkin_ws/devel/include/hector_mapping/HectorIterData.h"
-  "/root/catkin_ws/devel/include/hector_mapping/ResetMapping.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_mapping/HectorDebugInfo.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_mapping/HectorIterData.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_mapping/ResetMapping.h"
   "CMakeFiles/hector_mapping_generate_messages_cpp"
 )
 

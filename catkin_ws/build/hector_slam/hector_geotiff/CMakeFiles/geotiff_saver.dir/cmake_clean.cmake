@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_geotiff/geotiff_saver"
-  "/root/catkin_ws/devel/lib/hector_geotiff/geotiff_saver.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_geotiff/geotiff_saver"
+  "/root/rc-car/catkin_ws/devel/lib/hector_geotiff/geotiff_saver.pdb"
   "CMakeFiles/geotiff_saver.dir/src/geotiff_saver.cpp.o"
 )
 

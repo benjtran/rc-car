@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_map_server/hector_map_server"
-  "/root/catkin_ws/devel/lib/hector_map_server/hector_map_server.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_map_server/hector_map_server"
+  "/root/rc-car/catkin_ws/devel/lib/hector_map_server/hector_map_server.pdb"
   "CMakeFiles/hector_map_server.dir/src/hector_map_server.cpp.o"
 )
 

@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/share/gennodejs/ros/hector_mapping/msg/HectorDebugInfo.js"
-  "/root/catkin_ws/devel/share/gennodejs/ros/hector_mapping/msg/HectorIterData.js"
-  "/root/catkin_ws/devel/share/gennodejs/ros/hector_mapping/srv/ResetMapping.js"
+  "/root/rc-car/catkin_ws/devel/share/gennodejs/ros/hector_mapping/msg/HectorDebugInfo.js"
+  "/root/rc-car/catkin_ws/devel/share/gennodejs/ros/hector_mapping/msg/HectorIterData.js"
+  "/root/rc-car/catkin_ws/devel/share/gennodejs/ros/hector_mapping/srv/ResetMapping.js"
   "CMakeFiles/hector_mapping_generate_messages_nodejs"
 )
 

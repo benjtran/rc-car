@@ -1,8 +1,8 @@
-# Install script for directory: /root/catkin_ws/src/hector_slam/hector_map_tools
+# Install script for directory: /root/rc-car/catkin_ws/src/hector_slam/hector_map_tools
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-  set(CMAKE_INSTALL_PREFIX "/root/catkin_ws/install")
+  set(CMAKE_INSTALL_PREFIX "/root/rc-car/catkin_ws/install")
 endif()
 string(REGEX REPLACE "/$" "" CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 
@@ -38,21 +38,21 @@ if(NOT DEFINED CMAKE_CROSSCOMPILING)
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/root/catkin_ws/build/hector_slam/hector_map_tools/catkin_generated/installspace/hector_map_tools.pc")
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig" TYPE FILE FILES "/root/rc-car/catkin_ws/build/hector_slam/hector_map_tools/catkin_generated/installspace/hector_map_tools.pc")
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/hector_map_tools/cmake" TYPE FILE FILES
-    "/root/catkin_ws/build/hector_slam/hector_map_tools/catkin_generated/installspace/hector_map_toolsConfig.cmake"
-    "/root/catkin_ws/build/hector_slam/hector_map_tools/catkin_generated/installspace/hector_map_toolsConfig-version.cmake"
+    "/root/rc-car/catkin_ws/build/hector_slam/hector_map_tools/catkin_generated/installspace/hector_map_toolsConfig.cmake"
+    "/root/rc-car/catkin_ws/build/hector_slam/hector_map_tools/catkin_generated/installspace/hector_map_toolsConfig-version.cmake"
     )
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/hector_map_tools" TYPE FILE FILES "/root/catkin_ws/src/hector_slam/hector_map_tools/package.xml")
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/hector_map_tools" TYPE FILE FILES "/root/rc-car/catkin_ws/src/hector_slam/hector_map_tools/package.xml")
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/hector_map_tools" TYPE DIRECTORY FILES "/root/catkin_ws/src/hector_slam/hector_map_tools/include/hector_map_tools/" FILES_MATCHING REGEX "/[^/]*\\.h$" REGEX "/\\.svn$" EXCLUDE)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/hector_map_tools" TYPE DIRECTORY FILES "/root/rc-car/catkin_ws/src/hector_slam/hector_map_tools/include/hector_map_tools/" FILES_MATCHING REGEX "/[^/]*\\.h$" REGEX "/\\.svn$" EXCLUDE)
 endif()
 

@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_geotiff/geotiff_node"
-  "/root/catkin_ws/devel/lib/hector_geotiff/geotiff_node.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_geotiff/geotiff_node"
+  "/root/rc-car/catkin_ws/devel/lib/hector_geotiff/geotiff_node.pdb"
   "CMakeFiles/geotiff_node.dir/src/geotiff_node.cpp.o"
 )
 

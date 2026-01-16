@@ -1,7 +1,7 @@
 # generated from genmsg/cmake/pkg-genmsg.context.in
 
 messages_str = ""
-services_str = "/root/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetDistanceToObstacle.srv;/root/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetRecoveryInfo.srv;/root/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetRobotTrajectory.srv;/root/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetSearchPosition.srv;/root/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetNormal.srv"
+services_str = "/root/rc-car/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetDistanceToObstacle.srv;/root/rc-car/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetRecoveryInfo.srv;/root/rc-car/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetRobotTrajectory.srv;/root/rc-car/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetSearchPosition.srv;/root/rc-car/catkin_ws/src/hector_slam/hector_nav_msgs/srv/GetNormal.srv"
 pkg_name = "hector_nav_msgs"
 dependencies_str = "geometry_msgs;nav_msgs;std_msgs"
 langs = "gencpp;geneus;genlisp;gennodejs;genpy"

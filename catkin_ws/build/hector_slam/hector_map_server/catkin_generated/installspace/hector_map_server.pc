@@ -1,4 +1,4 @@
-prefix=/root/catkin_ws/install
+prefix=/root/rc-car/catkin_ws/install
 
 Name: hector_map_server
 Description: Description of hector_map_server

@@ -1,9 +1,9 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetDistanceToObstacle.lisp"
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetNormal.lisp"
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetRecoveryInfo.lisp"
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetRobotTrajectory.lisp"
-  "/root/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetSearchPosition.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetDistanceToObstacle.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetNormal.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetRecoveryInfo.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetRobotTrajectory.lisp"
+  "/root/rc-car/catkin_ws/devel/share/common-lisp/ros/hector_nav_msgs/srv/GetSearchPosition.lisp"
   "CMakeFiles/hector_nav_msgs_generate_messages_lisp"
 )
 

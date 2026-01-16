@@ -1026,9 +1026,9 @@ vector
 time.h
 -
 
-/root/catkin_ws/src/hector_slam/hector_compressed_map_transport/src/map_to_image_node.cpp
+/root/rc-car/catkin_ws/src/hector_slam/hector_compressed_map_transport/src/map_to_image_node.cpp
 ros/ros.h
-/root/catkin_ws/src/hector_slam/hector_compressed_map_transport/src/ros/ros.h
+/root/rc-car/catkin_ws/src/hector_slam/hector_compressed_map_transport/src/ros/ros.h
 nav_msgs/GetMap.h
 -
 geometry_msgs/Quaternion.h
@@ -1046,7 +1046,7 @@ Eigen/Geometry
 hector_map_tools/HectorMapTools.h
 -
 
-/root/catkin_ws/src/hector_slam/hector_map_tools/include/hector_map_tools/HectorMapTools.h
+/root/rc-car/catkin_ws/src/hector_slam/hector_map_tools/include/hector_map_tools/HectorMapTools.h
 nav_msgs/OccupancyGrid.h
 -
 nav_msgs/MapMetaData.h

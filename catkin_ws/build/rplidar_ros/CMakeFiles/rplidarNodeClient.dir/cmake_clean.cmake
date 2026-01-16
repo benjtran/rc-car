@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/rplidar_ros/rplidarNodeClient"
-  "/root/catkin_ws/devel/lib/rplidar_ros/rplidarNodeClient.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/rplidar_ros/rplidarNodeClient"
+  "/root/rc-car/catkin_ws/devel/lib/rplidar_ros/rplidarNodeClient.pdb"
   "CMakeFiles/rplidarNodeClient.dir/src/client.cpp.o"
 )
 

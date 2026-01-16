@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_trajectory_server/hector_trajectory_server"
-  "/root/catkin_ws/devel/lib/hector_trajectory_server/hector_trajectory_server.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_trajectory_server/hector_trajectory_server"
+  "/root/rc-car/catkin_ws/devel/lib/hector_trajectory_server/hector_trajectory_server.pdb"
   "CMakeFiles/hector_trajectory_server.dir/src/hector_trajectory_server.cpp.o"
 )
 

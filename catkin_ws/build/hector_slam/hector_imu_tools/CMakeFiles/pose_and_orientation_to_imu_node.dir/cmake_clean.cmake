@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_imu_tools/pose_and_orientation_to_imu_node"
-  "/root/catkin_ws/devel/lib/hector_imu_tools/pose_and_orientation_to_imu_node.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_imu_tools/pose_and_orientation_to_imu_node"
+  "/root/rc-car/catkin_ws/devel/lib/hector_imu_tools/pose_and_orientation_to_imu_node.pdb"
   "CMakeFiles/pose_and_orientation_to_imu_node.dir/src/pose_and_orientation_to_imu_node.cpp.o"
 )
 

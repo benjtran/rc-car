@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/hector_compressed_map_transport/map_to_image_node"
-  "/root/catkin_ws/devel/lib/hector_compressed_map_transport/map_to_image_node.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/hector_compressed_map_transport/map_to_image_node"
+  "/root/rc-car/catkin_ws/devel/lib/hector_compressed_map_transport/map_to_image_node.pdb"
   "CMakeFiles/map_to_image_node.dir/src/map_to_image_node.cpp.o"
 )
 

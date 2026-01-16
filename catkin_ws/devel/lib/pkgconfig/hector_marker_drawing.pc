@@ -1,8 +1,8 @@
-prefix=/root/catkin_ws/devel
+prefix=/root/rc-car/catkin_ws/devel
 
 Name: hector_marker_drawing
 Description: Description of hector_marker_drawing
 Version: 0.5.2
-Cflags: -I/root/catkin_ws/src/hector_slam/hector_marker_drawing/include -I/usr/include/eigen3
+Cflags: -I/root/rc-car/catkin_ws/src/hector_slam/hector_marker_drawing/include -I/usr/include/eigen3
 Libs: -L${prefix}/lib 
 Requires: roscpp visualization_msgs

@@ -1,9 +1,9 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/include/hector_nav_msgs/GetDistanceToObstacle.h"
-  "/root/catkin_ws/devel/include/hector_nav_msgs/GetNormal.h"
-  "/root/catkin_ws/devel/include/hector_nav_msgs/GetRecoveryInfo.h"
-  "/root/catkin_ws/devel/include/hector_nav_msgs/GetRobotTrajectory.h"
-  "/root/catkin_ws/devel/include/hector_nav_msgs/GetSearchPosition.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_nav_msgs/GetDistanceToObstacle.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_nav_msgs/GetNormal.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_nav_msgs/GetRecoveryInfo.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_nav_msgs/GetRobotTrajectory.h"
+  "/root/rc-car/catkin_ws/devel/include/hector_nav_msgs/GetSearchPosition.h"
   "CMakeFiles/hector_nav_msgs_generate_messages_cpp"
 )
 

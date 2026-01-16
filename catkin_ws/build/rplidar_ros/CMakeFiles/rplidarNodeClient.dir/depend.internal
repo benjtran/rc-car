@@ -62,4 +62,4 @@ rplidar_ros/CMakeFiles/rplidarNodeClient.dir/src/client.cpp.o
  /opt/ros/noetic/include/std_msgs/Header.h
  /opt/ros/noetic/include/xmlrpcpp/XmlRpcDecl.h
  /opt/ros/noetic/include/xmlrpcpp/XmlRpcValue.h
- /root/catkin_ws/src/rplidar_ros/src/client.cpp
+ /root/rc-car/catkin_ws/src/rplidar_ros/src/client.cpp

@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "/root/catkin_ws/devel/lib/libgeotiff_writer.pdb"
-  "/root/catkin_ws/devel/lib/libgeotiff_writer.so"
+  "/root/rc-car/catkin_ws/devel/lib/libgeotiff_writer.pdb"
+  "/root/rc-car/catkin_ws/devel/lib/libgeotiff_writer.so"
   "CMakeFiles/geotiff_writer.dir/src/geotiff_writer/geotiff_writer.cpp.o"
 )
 

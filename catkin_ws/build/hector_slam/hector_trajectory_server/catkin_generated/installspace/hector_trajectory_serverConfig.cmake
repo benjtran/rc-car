@@ -67,14 +67,14 @@ set(hector_trajectory_server_CONFIG_INCLUDED TRUE)
 
 # set variables for source/devel/install prefixes
 if("FALSE" STREQUAL "TRUE")
-  set(hector_trajectory_server_SOURCE_PREFIX /root/catkin_ws/src/hector_slam/hector_trajectory_server)
-  set(hector_trajectory_server_DEVEL_PREFIX /root/catkin_ws/devel)
+  set(hector_trajectory_server_SOURCE_PREFIX /root/rc-car/catkin_ws/src/hector_slam/hector_trajectory_server)
+  set(hector_trajectory_server_DEVEL_PREFIX /root/rc-car/catkin_ws/devel)
   set(hector_trajectory_server_INSTALL_PREFIX "")
   set(hector_trajectory_server_PREFIX ${hector_trajectory_server_DEVEL_PREFIX})
 else()
   set(hector_trajectory_server_SOURCE_PREFIX "")
   set(hector_trajectory_server_DEVEL_PREFIX "")
-  set(hector_trajectory_server_INSTALL_PREFIX /root/catkin_ws/install)
+  set(hector_trajectory_server_INSTALL_PREFIX /root/rc-car/catkin_ws/install)
   set(hector_trajectory_server_PREFIX ${hector_trajectory_server_INSTALL_PREFIX})
 endif()
 
@@ -156,7 +156,7 @@ foreach(library ${libraries})
     set(lib_path "")
     set(lib "${library}-NOTFOUND")
     # since the path where the library is found is returned we have to iterate over the paths manually
-    foreach(path /root/catkin_ws/install/lib;/opt/ros/noetic/lib)
+    foreach(path /root/rc-car/catkin_ws/install/lib;/opt/ros/noetic/lib)
       find_library(lib ${library}
         PATHS ${path}
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
