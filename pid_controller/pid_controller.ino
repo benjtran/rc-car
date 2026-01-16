@@ -95,7 +95,7 @@ Controller controller[NUMMOTORS];
 
 void setup() {
   Serial.begin(9600);
-
+  delay(3000);
   for (int i = 0; i < NUMMOTORS; i++) {
     pinMode(in1[i], OUTPUT);
     pinMode(in2[i], OUTPUT);

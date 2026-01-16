@@ -7,12 +7,12 @@ def main():
     rospy.loginfo("Path planner node started!")
 
     pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
-    rate = rospy.Rate(2)
+    rate = rospy.Rate(4)
 
     vel = 0.0
 
     while not rospy.is_shutdown():
-        vel = 2.5 if vel == 0.0 else 0.0
+        vel = 8 if vel == 0.0 else 0.0
         msg = Float32(data=vel)
 
         pub.publish(msg)

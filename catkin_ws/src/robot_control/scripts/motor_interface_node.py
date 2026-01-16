@@ -9,34 +9,38 @@ Motor Interface node
 
 import rospy
 import serial
-import time
-
-fromt std_msgs.msg import Float32
+from std_msgs.msg import Float32
 
 PORT = '/dev/ttyACM0'
 BAUD_RATE = 9600
 
-def callback(msg):
-    rospy.loginfo("Recieved float: %.2f", msg.data)
+ser = None  # Make global so callback can use it
 
-def send_command(ser, cmd):
-    ser.write((cmd + '\n').encode())
+def callback(msg):
+    global ser
+    if ser is not None:
+        cmd = str(msg.data)
+        ser.write((cmd + '\n').encode())
+        rospy.loginfo("Sent command to motor: %s", cmd)
 
 def main():
+    global ser
     rospy.init_node('motor_interface', anonymous=True)
     rospy.loginfo("Motor interface node started!")
-    rospy.Subscriber('velocity_cmd', Float32, callback)
-    rospy.loginfo("Listening...")
+
+    # Subscribe to the exact topic
+    rospy.Subscriber('/vel_cmd', Float32, callback)
+
+    # Open serial port
     ser = serial.Serial(PORT, BAUD_RATE, timeout=1)
-    time.sleep(2)
-    rate = rospy.Rate(0.5)
-    while not rospy.is_shutdown():
-        send_command(ser, "24.4")
-        time.sleep(2)
-        send_command(ser, "0.0")
-        time.sleep(2)
+    rospy.sleep(2)  # allow Arduino to reset
+
+    rospy.loginfo("Listening for velocity commands...")
+    rospy.spin()  # keep node alive, callback handles everything
+
     ser.close()
 
 if __name__ == "__main__":
     main()
+
 
