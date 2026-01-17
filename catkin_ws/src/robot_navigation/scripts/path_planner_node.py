@@ -6,11 +6,13 @@ import numpy as np
 from std_msgs.msg import Float32
 from std_msgs.msg import Header
 from nav_msgs.msg import OccupancyGrid
+from visualization_msgs.msg import Marker, MarkerArray
 
 class MapPoseReader:
     def __init__(self):
         self.map = None
         self.map_received = False
+        self.pose = np.zeros(3)
         self.tf_listener = tf.TransformListener()
 
         rospy.Subscriber("/map", OccupancyGrid, self.map_callback)
@@ -37,6 +39,7 @@ class MapPoseReader:
 
         x, y = trans[0], trans[1]
         yaw = tft.euler_from_quaternion(rot)[2]
+        self.pose = x, y, yaw
         mx, my = self.world_to_map(x, y)
 
         if mx is None:
@@ -63,7 +66,7 @@ class MapPoseReader:
         return mx, my
     
 class CostMap:
-    def __init__(self, reader, robot_radius=0.20): # Robot radius in meters
+    def __init__(self, reader, robot_radius=0.20): # Radius in meters
         self.reader = reader
         while not rospy.is_shutdown() and not self.reader.map_received:
             rospy.loginfo_throttle(5, "Waiting for map before creating costmap...")
@@ -151,17 +154,109 @@ class CostMap:
 
 
 class Navigator:
-    def __init__(self):
+    def __init__(self, costmap):
+        self.costmap = costmap
         self.pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
+        self.frontier_pub = rospy.Publisher("/frontiers", MarkerArray, queue_size=1)
         self.vel = 0.0
-        rospy.Timer(rospy.Duration(0.5), self.update)
+        rospy.Timer(rospy.Duration(1), self.update)
+    
+    def update_frontiers(self):
+        if not self.costmap.reader.map_received:
+            rospy.loginfo_throttle(5, "Waiting for map...")
+            return []
+
+        grid, w, h = self.get_grid()
+        frontiers = self.find_frontiers(grid, w, h)
+        world_frontiers = [self.grid_to_world(mx, my) for mx, my in frontiers]
+
+        # Publish for RViz visualization
+        self.publish_frontiers(world_frontiers)
+
+        return world_frontiers
+
+    def get_grid(self):
+        map_msg = self.costmap.reader.map
+        w = map_msg.info.width
+        h = map_msg.info.height
+        grid = np.array(map_msg.data, dtype=np.int8).reshape((h, w))
+        return grid, w, h
+
+    def grid_to_world(self, mx, my):
+        map_msg = self.costmap.reader.map
+        x = map_msg.info.origin.position.x + mx * map_msg.info.resolution
+        y = map_msg.info.origin.position.y + my * map_msg.info.resolution
+        return (x, y)
+
+    def world_to_grid(self, x, y):
+        map_msg = self.costmap.reader.map
+        mx = int((x - map_msg.info.origin.position.x) / map_msg.info.resolution)
+        my = int((y - map_msg.info.origin.position.y) / map_msg.info.resolution)
+        return mx, my
+
+    def is_frontier_cell(self, grid, x, y):
+        if grid[y, x] != 0:
+            return False  # must be free
+
+        for dx in [-1,0,1]:
+            for dy in [-1,0,1]:
+                nx, ny = x + dx, y + dy
+                if nx < 0 or ny < 0 or nx >= grid.shape[1] or ny >= grid.shape[0]:
+                    continue
+                if grid[ny, nx] == -1:
+                    return True
+        return False
+
+    def find_frontiers(self, grid, w, h):
+        frontiers = []
+        for y in range(h):
+            for x in range(w):
+                if self.is_frontier_cell(grid, x, y):
+                    frontiers.append((x, y))
+        return frontiers
+
+    def select_closest_frontier(self, robot_x, robot_y):
+        world_frontiers = self.update_frontiers()
+        if not world_frontiers:
+            return None
+
+        closest = min(world_frontiers,
+                      key=lambda f: np.hypot(f[0] - robot_x, f[1] - robot_y))
+        return closest
+
+    def publish_frontiers(self, world_frontiers):
+        markers = MarkerArray()
+        for i, (x, y) in enumerate(world_frontiers):
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = rospy.Time.now()
+            marker.id = i
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = x
+            marker.pose.position.y = y
+            marker.pose.position.z = 0.0
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            marker.color.a = 1.0
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            markers.markers.append(marker)
+        self.frontier_pub.publish(markers)
     
     def update(self, msg):
-        self.vel = 8 if self.vel == 0.0 else 0.0
-        msg = Float32(data=self.vel)
+        x, y, yaw = self.costmap.reader.pose
+        target = self.select_closest_frontier(x, y)
+        if target:
+            rospy.loginfo(f"Next frontier to explore: {target}")
 
-        self.pub.publish(msg)
-        rospy.loginfo("Published velocity: %.2f", self.vel)
+        # self.vel = 8 if self.vel == 0.0 else 0.0
+        # msg = Float32(data=self.vel)
+
+        # self.pub.publish(msg)
+        # rospy.loginfo("Published velocity: %.2f", self.vel)
 
 def main():
     rospy.init_node('path_planner', anonymous=True)
@@ -169,7 +264,7 @@ def main():
 
     reader = MapPoseReader()
     costmap = CostMap(reader=reader)
-    nav = Navigator
+    nav = Navigator(costmap=costmap)
     rospy.spin()
     # pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
     # rate = rospy.Rate(4)
