@@ -153,11 +153,61 @@ class CostMap:
         self.publish_costmap()
 
 
+class AStarPlanner:
+    def __init__(self, costmap):
+        self.costmap = costmap
+        self.h, self.w = costmap.shape
+
+    def plan(self, start, goal):
+        """
+        start, goal: (mx, my) grid coordinates
+        Returns a list of (mx, my) path cells from start -> goal.
+        Avoids cells with cost >= 253 (inflated obstacles).
+        """
+        import heapq
+
+        open_set = []
+        heapq.heappush(open_set, (0, start))
+        came_from = {}
+        g_score = {start: 0}
+
+        def heuristic(a, b):
+            return np.hypot(a[0] - b[0], a[1] - b[1])
+
+        while open_set:
+            _, current = heapq.heappop(open_set)
+            if current == goal:
+                # Reconstruct path
+                path = [current]
+                while current in came_from:
+                    current = came_from[current]
+                    path.append(current)
+                return path[::-1]
+
+            cx, cy = current
+            for dx in [-1,0,1]:
+                for dy in [-1,0,1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < self.w and 0 <= ny < self.h:
+                        if self.costmap[ny, nx] >= 253:
+                            continue
+                        neighbor = (nx, ny)
+                        tentative_g = g_score[current] + np.hypot(dx, dy)
+                        if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                            g_score[neighbor] = tentative_g
+                            f = tentative_g + heuristic(neighbor, goal)
+                            heapq.heappush(open_set, (f, neighbor))
+                            came_from[neighbor] = current
+        return []  # No path found
+
 class Navigator:
     def __init__(self, costmap):
         self.costmap = costmap
         self.pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
         self.frontier_pub = rospy.Publisher("/frontiers", MarkerArray, queue_size=1)
+        self.path_pub = rospy.Publisher("/planned_path", Marker, queue_size=1)  # For RViz
         self.vel = 0.0
         rospy.Timer(rospy.Duration(1), self.update)
     
@@ -172,7 +222,6 @@ class Navigator:
 
         # Publish for RViz visualization
         self.publish_frontiers(world_frontiers)
-
         return world_frontiers
 
     def get_grid(self):
@@ -196,8 +245,7 @@ class Navigator:
 
     def is_frontier_cell(self, grid, x, y):
         if grid[y, x] != 0:
-            return False  # must be free
-
+            return False
         for dx in [-1,0,1]:
             for dy in [-1,0,1]:
                 nx, ny = x + dx, y + dy
@@ -215,14 +263,30 @@ class Navigator:
                     frontiers.append((x, y))
         return frontiers
 
-    def select_closest_frontier(self, robot_x, robot_y):
+    def select_frontier_with_path(self, robot_x, robot_y):
+        """
+        Select the closest frontier that has a valid path using A*.
+        Returns world coordinates (x, y) and the path.
+        """
         world_frontiers = self.update_frontiers()
         if not world_frontiers:
-            return None
+            return None, []
 
-        closest = min(world_frontiers,
-                      key=lambda f: np.hypot(f[0] - robot_x, f[1] - robot_y))
-        return closest
+        # Convert robot pose to grid
+        start_mx, start_my = self.world_to_grid(robot_x, robot_y)
+
+        # Try each frontier, closest first
+        frontiers_sorted = sorted(world_frontiers,
+                                  key=lambda f: np.hypot(f[0]-robot_x, f[1]-robot_y))
+
+        astar = AStarPlanner(self.costmap.costmap)
+        for fx, fy in frontiers_sorted:
+            goal_mx, goal_my = self.world_to_grid(fx, fy)
+            path_cells = astar.plan((start_mx, start_my), (goal_mx, goal_my))
+            if path_cells:
+                path_world = [self.grid_to_world(mx, my) for mx, my in path_cells]
+                return (fx, fy), path_world
+        return None, []
 
     def publish_frontiers(self, world_frontiers):
         markers = MarkerArray()
@@ -236,21 +300,50 @@ class Navigator:
             marker.pose.position.x = x
             marker.pose.position.y = y
             marker.pose.position.z = 0.0
-            marker.scale.x = 0.05
-            marker.scale.y = 0.05
-            marker.scale.z = 0.05
+            marker.scale.x = 0.08
+            marker.scale.y = 0.08
+            marker.scale.z = 0.08
             marker.color.a = 1.0
             marker.color.r = 1.0
             marker.color.g = 0.0
             marker.color.b = 0.0
             markers.markers.append(marker)
         self.frontier_pub.publish(markers)
-    
-    def update(self, msg):
+
+    def publish_path(self, path_world):
+        if not path_world:
+            return
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "path"
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.05
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        for x, y in path_world:
+            from geometry_msgs.msg import Point
+            p = Point()
+            p.x = x
+            p.y = y
+            p.z = 0.0
+            marker.points.append(p)
+        self.path_pub.publish(marker)
+
+    def update(self, event):
         x, y, yaw = self.costmap.reader.pose
-        target = self.select_closest_frontier(x, y)
+        target, path_world = self.select_frontier_with_path(x, y)
         if target:
-            rospy.loginfo(f"Next frontier to explore: {target}")
+            rospy.loginfo(f"Next reachable frontier: {target} with path length {len(path_world)}")
+            # Publish path for RViz
+            self.publish_path(path_world)
+
+            # Here you can feed path_world to your Pure Pursuit controller
+            # self.pure_pursuit.follow_path(path_world)
 
         # self.vel = 8 if self.vel == 0.0 else 0.0
         # msg = Float32(data=self.vel)
