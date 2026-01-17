@@ -2,7 +2,9 @@
 import rospy
 import tf
 import tf.transformations as tft
+import numpy as np
 from std_msgs.msg import Float32
+from std_msgs.msg import Header
 from nav_msgs.msg import OccupancyGrid
 
 class MapPoseReader:
@@ -59,12 +61,99 @@ class MapPoseReader:
             return None, None
 
         return mx, my
+    
+class CostMap:
+    def __init__(self, reader, robot_radius=0.38): # Robot radius in meters
+        self.reader = reader
+        self.inflation_radius = int(robot_radius / self.reader.map.info.resolution)
+
+        self.costmap = np.zeros(
+            (self.reader.map.info.height, self.reader.map.info.width),
+            dtype=np.uint8
+        )
+
+        costmap_pub = rospy.Publisher("/costmap", OccupancyGrid, queue_size=1, latch=True)
+        rospy.Timer(rospy.Duration(0.5), self.generate_costmap)
+    
+    def mark_obstacles(self):
+        w = self.reader.map.info.width
+        h = self.reader.map.info.height
+
+        for y in range(h):
+            for x in range(w):
+                val = self.reader.map.data[y * w + x]
+
+                if val == 100:
+                    self.costmap[y, x] = 254
+                elif val == -1:
+                    self.costmap[y, x] = 50
+                else:
+                    self.costmap[y, x] = 0
+
+    def inflate_obstacles(self):
+        h, w = self.costmap.shape
+
+        lethal = np.argwhere(self.costmap == 254)
+
+        for y, x in lethal:
+            for dy in range(-self.inflation_radius, self.inflation_radius + 1):
+                for dx in range(-self.inflation_radius, self.inflation_radius + 1):
+                    ny = y + dy
+                    nx = x + dx
+
+                    if ny < 0 or nx < 0 or ny >= h or nx >= w:
+                        continue
+
+                    dist = np.hypot(dx, dy)
+                    if dist > self.inflation_radius:
+                        continue
+
+                    if self.costmap[ny, nx] < 253:
+                        self.costmap[ny, nx] = 253
+    
+    def publish_costmap(self):
+        grid_msg = OccupancyGrid()
+        grid_msg.header = Header()
+        grid_msg.header.stamp = rospy.Time.now()
+        grid_msg.header.frame_id = "map"
+
+        grid_msg.info.resolution = self.reader.map.info.resolution
+        grid_msg.info.width =  self.reader.map.info.width
+        grid_msg.info.height =  self.reader.map.info.height
+        grid_msg.info.origin =  self.reader.map.info.origin  # same origin as SLAM map
+
+        # Flatten NumPy array and convert to int8
+        grid_msg.data = self.costmap.flatten().astype(np.int8).tolist()
+
+        self.costmap_pub.publish(grid_msg)
+
+    
+    def generate_costmap(self):
+        self.mark_obstacles()
+        self.inflate_obstacles()
+        self.publish_costmap()
+
+
+class Navigator:
+    def __init__(self):
+        self.pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
+        self.vel = 0.0
+        rospy.Timer(rospy.Duration(0.5), self.update)
+    
+    def update(self, msg):
+        self.vel = 8 if self.vel == 0.0 else 0.0
+        msg = Float32(data=self.vel)
+
+        self.pub.publish(msg)
+        rospy.loginfo("Published velocity: %.2f", self.vel)
 
 def main():
     rospy.init_node('path_planner', anonymous=True)
     rospy.loginfo("Path planner node started!")
 
     reader = MapPoseReader()
+    costmap = CostMap()
+    nav = Navigator
     rospy.spin()
     # pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
     # rate = rospy.Rate(4)
