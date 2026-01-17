@@ -63,8 +63,11 @@ class MapPoseReader:
         return mx, my
     
 class CostMap:
-    def __init__(self, reader, robot_radius=0.38): # Robot radius in meters
+    def __init__(self, reader, robot_radius=0.20): # Robot radius in meters
         self.reader = reader
+        while not rospy.is_shutdown() and not self.reader.map_received:
+            rospy.loginfo_throttle(5, "Waiting for map before creating costmap...")
+            rospy.sleep(0.5)
         self.inflation_radius = int(robot_radius / self.reader.map.info.resolution)
 
         self.costmap = np.zeros(
@@ -72,7 +75,7 @@ class CostMap:
             dtype=np.uint8
         )
 
-        costmap_pub = rospy.Publisher("/costmap", OccupancyGrid, queue_size=1, latch=True)
+        self. costmap_pub = rospy.Publisher("/costmap", OccupancyGrid, queue_size=1, latch=True)
         rospy.Timer(rospy.Duration(0.5), self.generate_costmap)
     
     def mark_obstacles(self):
@@ -128,7 +131,20 @@ class CostMap:
         self.costmap_pub.publish(grid_msg)
 
     
-    def generate_costmap(self):
+    def generate_costmap(self, event):
+        if self.reader.map is None:
+            rospy.logwarn_throttle(5, "No map yet, skipping costmap generation")
+            return
+
+        if not hasattr(self, 'inflation_radius'):
+            robot_radius = 0.38
+            self.inflation_radius = int(robot_radius / self.reader.map.info.resolution)
+            self.costmap = np.zeros(
+                (self.reader.map.info.height, self.reader.map.info.width),
+                dtype=np.uint8
+            )
+            self.costmap_pub = rospy.Publisher("/costmap", OccupancyGrid, queue_size=1, latch=True)
+
         self.mark_obstacles()
         self.inflate_obstacles()
         self.publish_costmap()
@@ -152,7 +168,7 @@ def main():
     rospy.loginfo("Path planner node started!")
 
     reader = MapPoseReader()
-    costmap = CostMap()
+    costmap = CostMap(reader=reader)
     nav = Navigator
     rospy.spin()
     # pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
