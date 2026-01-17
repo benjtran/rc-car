@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import rospy
 import tf
+import tf.transformations as tft
 from std_msgs.msg import Float32
 from nav_msgs.msg import OccupancyGrid
 
@@ -33,6 +34,7 @@ class MapPoseReader:
             return
 
         x, y = trans[0], trans[1]
+        yaw = tft.euler_from_quaternion(rot)[2]
         mx, my = self.world_to_map(x, y)
 
         if mx is None:
@@ -40,8 +42,8 @@ class MapPoseReader:
             return
 
         rospy.loginfo(
-            "Robot pose: world (%.2f, %.2f) -> map (%d, %d)",
-            x, y, mx, my
+            "Robot pose: world (%.2f, %.2f) Rotation (%.2f)",
+            x, y, yaw
         )
 
     def world_to_map(self, x, y):
