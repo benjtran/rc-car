@@ -157,13 +157,9 @@ class AStarPlanner:
     def __init__(self, costmap):
         self.costmap = costmap
         self.h, self.w = costmap.shape
+        self.TRAVERSABLE_COST = 0  # Only white space
 
     def plan(self, start, goal):
-        """
-        start, goal: (mx, my) grid coordinates
-        Returns a list of (mx, my) path cells from start -> goal.
-        Avoids cells with cost >= 253 (inflated obstacles).
-        """
         import heapq
 
         open_set = []
@@ -177,7 +173,6 @@ class AStarPlanner:
         while open_set:
             _, current = heapq.heappop(open_set)
             if current == goal:
-                # Reconstruct path
                 path = [current]
                 while current in came_from:
                     current = came_from[current]
@@ -191,8 +186,8 @@ class AStarPlanner:
                         continue
                     nx, ny = cx + dx, cy + dy
                     if 0 <= nx < self.w and 0 <= ny < self.h:
-                        if self.costmap[ny, nx] >= 253:
-                            continue
+                        if self.costmap[ny, nx] != self.TRAVERSABLE_COST:
+                            continue  # STRICT: only white space
                         neighbor = (nx, ny)
                         tentative_g = g_score[current] + np.hypot(dx, dy)
                         if neighbor not in g_score or tentative_g < g_score[neighbor]:
@@ -201,6 +196,7 @@ class AStarPlanner:
                             heapq.heappush(open_set, (f, neighbor))
                             came_from[neighbor] = current
         return []  # No path found
+
 
 class Navigator:
     def __init__(self, costmap):
