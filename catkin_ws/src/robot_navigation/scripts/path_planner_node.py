@@ -272,8 +272,7 @@ class Navigator:
         start_mx, start_my = self.world_to_grid(robot_x, robot_y)
 
         # Try each frontier, closest first
-        frontiers_sorted = sorted(world_frontiers,
-                                  key=lambda f: np.hypot(f[0]-robot_x, f[1]-robot_y))
+        frontiers_sorted = sorted(world_frontiers, key=lambda f: np.hypot(f[0]-robot_x, f[1]-robot_y))[:5]
 
         astar = AStarPlanner(self.costmap.costmap)
         for fx, fy in frontiers_sorted:
@@ -283,6 +282,7 @@ class Navigator:
                 path_world = [self.grid_to_world(mx, my) for mx, my in path_cells]
                 return (fx, fy), path_world
         return None, []
+
 
     def publish_frontiers(self, world_frontiers):
         markers = MarkerArray()
