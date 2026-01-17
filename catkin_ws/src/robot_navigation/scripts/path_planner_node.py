@@ -2,11 +2,12 @@
 import rospy
 import tf
 from std_msgs.msg import Float32
+from nav_msgs.msg import OccupancyGrid
 
 class MapPoseReader:
     def __init__(self):
         self.map = None
-        self.map_recieved = False
+        self.map_received = False
         self.tf_listener = tf.TransformListener()
 
         rospy.Subscriber("/map", OccupancyGrid, self.map_callback)
@@ -14,7 +15,7 @@ class MapPoseReader:
     
     def map_callback(self, msg):
         self.map = msg
-        self.map_recieved = True
+        self.map_received = True
     
     def update(self, event):
         if not self.map_received:
@@ -62,7 +63,7 @@ def main():
     rospy.loginfo("Path planner node started!")
 
     reader = MapPoseReader()
-
+    rospy.spin()
     # pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
     # rate = rospy.Rate(4)
 
