@@ -14,43 +14,14 @@ class MapPoseReader:
         self.map_received = False
         self.pose = np.zeros(3)
         self.tf_listener = tf.TransformListener()
-
         rospy.Subscriber("/map", OccupancyGrid, self.map_callback)
-        rospy.Timer(rospy.Duration(0.5), self.update)
+        # rospy.Timer(rospy.Duration(0.5), self.update)
     
     def map_callback(self, msg):
         self.map = msg
         self.map_received = True
+        self.map_updated = True
     
-    def update(self, event):
-        if not self.map_received:
-            rospy.loginfo_throttle(5, "Waiting for map...")
-            return
-
-        try:
-            (trans, rot) = self.tf_listener.lookupTransform(
-                "map",
-                "base_link",
-                rospy.Time(0)
-            )
-        except tf.Exception:
-            rospy.logwarn_throttle(2, "TF not available")
-            return
-
-        x, y = trans[0], trans[1]
-        yaw = tft.euler_from_quaternion(rot)[2]
-        self.pose = x, y, yaw
-        mx, my = self.world_to_map(x, y)
-
-        if mx is None:
-            rospy.logwarn("Robot outside map bounds")
-            return
-
-        rospy.loginfo(
-            "Robot pose: world (%.2f, %.2f) Rotation (%.2f)",
-            x, y, yaw
-        )
-
     def world_to_map(self, x, y):
         origin = self.map.info.origin.position
         resolution = self.map.info.resolution
@@ -65,92 +36,99 @@ class MapPoseReader:
 
         return mx, my
     
-class CostMap:
-    def __init__(self, reader, robot_radius=0.20): # Radius in meters
-        self.reader = reader
-        while not rospy.is_shutdown() and not self.reader.map_received:
-            rospy.loginfo_throttle(5, "Waiting for map before creating costmap...")
-            rospy.sleep(0.5)
-        self.inflation_radius = int(robot_radius / self.reader.map.info.resolution)
-
-        self.costmap = np.zeros(
-            (self.reader.map.info.height, self.reader.map.info.width),
-            dtype=np.uint8
-        )
-
-        self. costmap_pub = rospy.Publisher("/costmap", OccupancyGrid, queue_size=1, latch=True)
-        rospy.Timer(rospy.Duration(0.5), self.generate_costmap)
-    
-    def mark_obstacles(self):
-        w = self.reader.map.info.width
-        h = self.reader.map.info.height
-
-        for y in range(h):
-            for x in range(w):
-                val = self.reader.map.data[y * w + x]
-
-                if val == 100:
-                    self.costmap[y, x] = 254
-                elif val == -1:
-                    self.costmap[y, x] = 50
-                else:
-                    self.costmap[y, x] = 0
-
-    def inflate_obstacles(self):
-        h, w = self.costmap.shape
-
-        lethal = np.argwhere(self.costmap == 254)
-
-        for y, x in lethal:
-            for dy in range(-self.inflation_radius, self.inflation_radius + 1):
-                for dx in range(-self.inflation_radius, self.inflation_radius + 1):
-                    ny = y + dy
-                    nx = x + dx
-
-                    if ny < 0 or nx < 0 or ny >= h or nx >= w:
-                        continue
-
-                    dist = np.hypot(dx, dy)
-                    if dist > self.inflation_radius:
-                        continue
-
-                    if self.costmap[ny, nx] < 253:
-                        self.costmap[ny, nx] = 253
-    
-    def publish_costmap(self):
-        grid_msg = OccupancyGrid()
-        grid_msg.header = Header()
-        grid_msg.header.stamp = rospy.Time.now()
-        grid_msg.header.frame_id = "map"
-
-        grid_msg.info.resolution = self.reader.map.info.resolution
-        grid_msg.info.width =  self.reader.map.info.width
-        grid_msg.info.height =  self.reader.map.info.height
-        grid_msg.info.origin =  self.reader.map.info.origin  # same origin as SLAM map
-
-        # Flatten NumPy array and convert to int8
-        grid_msg.data = self.costmap.flatten().astype(np.int8).tolist()
-
-        self.costmap_pub.publish(grid_msg)
-
-    
-    def generate_costmap(self, event):
-        if self.reader.map is None:
-            rospy.logwarn_throttle(5, "No map yet, skipping costmap generation")
+    def update_pose(self):
+        if not self.map_received:
+            rospy.loginfo_throttle(5, "Waiting for map...")
             return
 
-        if not hasattr(self, 'inflation_radius'):
-            robot_radius = 0.38
-            self.inflation_radius = int(robot_radius / self.reader.map.info.resolution)
-            self.costmap = np.zeros(
-                (self.reader.map.info.height, self.reader.map.info.width),
-                dtype=np.uint8
+        try:
+            (trans, rot) = self.tf_listener.lookupTransform(
+                "map",
+                "base_link",
+                rospy.Time(0)
             )
-            self.costmap_pub = rospy.Publisher("/costmap", OccupancyGrid, queue_size=1, latch=True)
+        except tf.Exception:
+            rospy.logwarn_throttle(2, "TF not available")
+            return False
 
-        self.mark_obstacles()
-        self.inflate_obstacles()
-        self.publish_costmap()
+        x, y = trans[0], trans[1]
+        yaw = tft.euler_from_quaternion(rot)[2]
+        self.pose = x, y, yaw
+        return True
+        # mx, my = self.world_to_map(x, y)
+
+        # if mx is None:
+        #     rospy.logwarn("Robot outside map bounds")
+        #     return
+
+        # rospy.loginfo(
+        #     "Robot pose: world (%.2f, %.2f) Rotation (%.2f)",
+        #     x, y, yaw
+        # )
+
+class CostMap:
+    def __init__(self, reader, robot_radius=0.20):
+        self.reader = reader
+        self.robot_radius = robot_radius
+        self.costmap = None
+        self.costmap_pub = rospy.Publisher(
+            "/costmap", OccupancyGrid, queue_size=1, latch=True
+        )
+        self.map_stamp = None
+
+    def update(self):
+        map_msg = self.reader.map
+        if map_msg is None:
+            return False
+
+        # Only recompute if map changed
+        if self.map_stamp == map_msg.header.stamp:
+            return True
+
+        self.map_stamp = map_msg.header.stamp
+
+        w = map_msg.info.width
+        h = map_msg.info.height
+        res = map_msg.info.resolution
+        inflation_cells = int(self.robot_radius / res)
+
+        grid = np.array(map_msg.data, dtype=np.int16).reshape((h, w))
+        costmap = np.zeros((h, w), dtype=np.uint8)
+
+        # Mark obstacles and unknowns
+        obstacle_mask = (grid == 100)
+        unknown_mask = (grid == -1)
+
+        costmap[obstacle_mask] = 254
+        costmap[unknown_mask] = 50
+
+        # Inflate obstacles (NumPy-only, local)
+        obstacle_indices = np.argwhere(obstacle_mask)
+
+        for oy, ox in obstacle_indices:
+            y0 = max(0, oy - inflation_cells)
+            y1 = min(h, oy + inflation_cells + 1)
+            x0 = max(0, ox - inflation_cells)
+            x1 = min(w, ox + inflation_cells + 1)
+
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    if costmap[y, x] >= 254:
+                        continue
+                    if np.hypot(y - oy, x - ox) <= inflation_cells:
+                        costmap[y, x] = 253
+
+        self.costmap = costmap
+        self.publish()
+        return True
+
+    def publish(self):
+        msg = OccupancyGrid()
+        msg.header = Header(stamp=rospy.Time.now(), frame_id="map")
+        msg.info = self.reader.map.info
+        msg.data = self.costmap.flatten().astype(np.int8).tolist()
+        self.costmap_pub.publish(msg)
+
 
 
 class AStarPlanner:
@@ -161,6 +139,9 @@ class AStarPlanner:
 
     def plan(self, start, goal):
         import heapq
+
+        if start == goal:
+            return [start]
 
         open_set = []
         heapq.heappush(open_set, (0, start))
@@ -205,20 +186,30 @@ class Navigator:
         self.frontier_pub = rospy.Publisher("/frontiers", MarkerArray, queue_size=1)
         self.path_pub = rospy.Publisher("/planned_path", Marker, queue_size=1)  # For RViz
         self.vel = 0.0
+
+        self.cached_frontiers = []
+        self.frontiers_stamp = None
+        self.FRONTIER_WINDOW = 80   # cells (~4 m @ 0.05 m resolution)
+
         rospy.Timer(rospy.Duration(1), self.update)
     
-    def update_frontiers(self):
+    def update_frontiers(self, robot_x, robot_y):
         if not self.costmap.reader.map_received:
-            rospy.loginfo_throttle(5, "Waiting for map...")
             return []
 
         grid, w, h = self.get_grid()
-        frontiers = self.find_frontiers(grid, w, h)
+        rx, ry = self.world_to_grid(robot_x, robot_y)
+
+        if rx < 0 or ry < 0 or rx >= w or ry >= h:
+            return []
+
+        frontiers = self.find_frontiers(grid, w, h, rx, ry)
         world_frontiers = [self.grid_to_world(mx, my) for mx, my in frontiers]
 
-        # Publish for RViz visualization
         self.publish_frontiers(world_frontiers)
         return world_frontiers
+
+
 
     def get_grid(self):
         map_msg = self.costmap.reader.map
@@ -251,37 +242,57 @@ class Navigator:
                     return True
         return False
 
-    def find_frontiers(self, grid, w, h):
+    def find_frontiers(self, grid, w, h, rx, ry):
         frontiers = []
-        for y in range(h):
-            for x in range(w):
-                if self.is_frontier_cell(grid, x, y):
+
+        xmin = max(1, rx - self.FRONTIER_WINDOW)
+        xmax = min(w - 1, rx + self.FRONTIER_WINDOW)
+        ymin = max(1, ry - self.FRONTIER_WINDOW)
+        ymax = min(h - 1, ry + self.FRONTIER_WINDOW)
+
+        for y in range(ymin, ymax):
+            for x in range(xmin, xmax):
+                if grid[y, x] != 0:
+                    continue
+                if np.any(grid[y-1:y+2, x-1:x+2] == -1):
                     frontiers.append((x, y))
+
         return frontiers
 
+
+
     def select_frontier_with_path(self, robot_x, robot_y):
-        """
-        Select the closest frontier that has a valid path using A*.
-        Returns world coordinates (x, y) and the path.
-        """
-        world_frontiers = self.update_frontiers()
+        world_frontiers = self.update_frontiers(robot_x, robot_y)
+
         if not world_frontiers:
             return None, []
 
-        # Convert robot pose to grid
         start_mx, start_my = self.world_to_grid(robot_x, robot_y)
 
-        # Try each frontier, closest first
-        frontiers_sorted = sorted(world_frontiers, key=lambda f: np.hypot(f[0]-robot_x, f[1]-robot_y))[:5]
+        frontiers_sorted = sorted(
+            world_frontiers,
+            key=lambda f: np.hypot(f[0] - robot_x, f[1] - robot_y)
+        )[:5]
 
         astar = AStarPlanner(self.costmap.costmap)
+
         for fx, fy in frontiers_sorted:
             goal_mx, goal_my = self.world_to_grid(fx, fy)
-            path_cells = astar.plan((start_mx, start_my), (goal_mx, goal_my))
+
+            if goal_mx < 0 or goal_my < 0:
+                continue
+
+            path_cells = astar.plan(
+                (start_mx, start_my),
+                (goal_mx, goal_my)
+            )
+
             if path_cells:
                 path_world = [self.grid_to_world(mx, my) for mx, my in path_cells]
                 return (fx, fy), path_world
+
         return None, []
+
 
 
     def publish_frontiers(self, world_frontiers):
@@ -318,8 +329,8 @@ class Navigator:
         marker.action = Marker.ADD
         marker.scale.x = 0.05
         marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
         marker.color.a = 1.0
         for x, y in path_world:
             from geometry_msgs.msg import Point
@@ -331,12 +342,19 @@ class Navigator:
         self.path_pub.publish(marker)
 
     def update(self, event):
+        if not self.costmap.update():
+            return
+
         x, y, yaw = self.costmap.reader.pose
         target, path_world = self.select_frontier_with_path(x, y)
+
         if target:
-            rospy.loginfo(f"Next reachable frontier: {target} with path length {len(path_world)}")
-            # Publish path for RViz
+            rospy.loginfo(
+                "Next reachable frontier: %s with path length %d",
+                target, len(path_world)
+            )
             self.publish_path(path_world)
+
 
             # Here you can feed path_world to your Pure Pursuit controller
             # self.pure_pursuit.follow_path(path_world)
@@ -347,13 +365,34 @@ class Navigator:
         # self.pub.publish(msg)
         # rospy.loginfo("Published velocity: %.2f", self.vel)
 
+class PathPlanner:
+    def __init__(self):
+        self.reader = MapPoseReader()
+        self.costmap = CostMap(self.reader)
+        self.navigator = Navigator(self.costmap)
+
+        rospy.Timer(rospy.Duration(0.5), self.update)
+
+    def update(self, event):
+        if not self.reader.map_received:
+            return
+
+        if not self.reader.update_pose():
+            return
+
+        if not self.costmap.update():
+            return
+
+        self.costmap.publish()
+
+        self.navigator.update(None)
+
+
 def main():
     rospy.init_node('path_planner', anonymous=True)
     rospy.loginfo("Path planner node started!")
 
-    reader = MapPoseReader()
-    costmap = CostMap(reader=reader)
-    nav = Navigator(costmap=costmap)
+    path_planner = PathPlanner()
     rospy.spin()
     # pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
     # rate = rospy.Rate(4)
