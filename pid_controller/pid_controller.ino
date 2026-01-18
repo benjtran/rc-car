@@ -30,13 +30,13 @@ volatile int pos[] = {0, 0, 0, 0};
 float target_f[] = {0.0, 0.0, 0.0, 0.0};
 long target[] = {0, 0, 0, 0};
 
-void setTarget(float t, float dt,  float vel) {
+void setTarget(float t, float dt,  float vel[]) {
   float position_change[4] = {0.0, 0.0, 0.0, 0.0};
   float pulses_per_turn = 508;
   float pulses_per_meter = pulses_per_turn * 4.75089382365;
 
   for (int i = 0; i < NUMMOTORS; i++) {
-   position_change[i] = vel * dt * pulses_per_meter; 
+   position_change[i] = vel[i] * dt * pulses_per_meter; 
   }
 
   for (int i = 0; i < 4; i++) {
@@ -116,13 +116,32 @@ void setup() {
 }
 
 void loop() {
-  float vel = 0.0;
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    vel = command.toFloat();
-    Serial.print("Recieved velocity: ");
-    Serial.println(vel, 4);
+
+    int idx = 0;
+    char *token;
+    char buf[50];
+
+    command.toCharArray(buf, sizeof(buf));
+    token = strtok(buf, ",");
+
+    while (token != NULL && idx < 4) {
+      vel[idx++] = atof(token);
+      token = strtok(NULL, ",");
+    }
+
+    if (idx == 4) {
+      Serial.print("Received velocities: ");
+      for (int i = 0; i < 4; i++) {
+        Serial.print(vel[i], 4);
+        Serial.print(" ");
+      }
+      Serial.println();
+    } else {
+      Serial.println("Invalid velocity command");
+    }
   }
 
   long curr_t = micros();

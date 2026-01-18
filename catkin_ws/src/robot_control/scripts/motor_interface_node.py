@@ -9,7 +9,7 @@ Motor Interface node
 
 import rospy
 import serial
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32MultiArray
 
 PORT = '/dev/ttyACM0'
 BAUD_RATE = 9600
@@ -18,10 +18,18 @@ ser = None  # Make global so callback can use it
 
 def callback(msg):
     global ser
-    if ser is not None:
-        cmd = str(msg.data)
-        ser.write((cmd + '\n').encode())
-        rospy.loginfo("Sent command to motor: %s", cmd)
+    if ser is None:
+        return
+
+    if len(msg.data) != 4:
+        rospy.logwarn("Expected 4 wheel velocities, got %d", len(msg.data))
+        return
+
+    # Format: v1,v2,v3,v4\n
+    cmd = "{:.4f},{:.4f},{:.4f},{:.4f}".format(*msg.data)
+    ser.write((cmd + "\n").encode())
+
+    rospy.loginfo_throttle(1, "Sent wheel velocities: %s", cmd)
 
 def main():
     global ser
@@ -29,7 +37,7 @@ def main():
     rospy.loginfo("Motor interface node started!")
 
     # Subscribe to the exact topic
-    rospy.Subscriber('/vel_cmd', Float32, callback)
+    rospy.Subscriber('/vel_cmd', Float32MultiArray, callback)
 
     # Open serial port
     ser = serial.Serial(PORT, BAUD_RATE, timeout=1)

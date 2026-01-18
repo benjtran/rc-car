@@ -4,6 +4,7 @@ import tf
 import tf.transformations as tft
 import numpy as np
 from std_msgs.msg import Float32
+from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Header
 from nav_msgs.msg import OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
@@ -182,7 +183,7 @@ class AStarPlanner:
 class Navigator:
     def __init__(self, costmap):
         self.costmap = costmap
-        self.pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
+        # self.pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
         self.frontier_pub = rospy.Publisher("/frontiers", MarkerArray, queue_size=1)
         self.path_pub = rospy.Publisher("/planned_path", Marker, queue_size=1)  # For RViz
         self.vel = 0.0
@@ -393,20 +394,25 @@ def main():
     rospy.loginfo("Path planner node started!")
 
     path_planner = PathPlanner()
+    pub = rospy.Publisher('/vel_cmd', Float32MultiArray, queue_size=10)
+    rate = rospy.Rate(4)
+
+    vel = 0.0
+    while not rospy.is_shutdown():
+        msg = Float32MultiArray()
+        msg.data = [-8.0, 2.0, -8.0, -2.0]  # [FL, FR, RL, RR]
+
+        pub.publish(msg)
+
+        rospy.loginfo_throttle(
+            1,
+            "Published wheel velocities [FL FR RL RR]: %s",
+            msg.data
+        )
+
+        rate.sleep()
+
     rospy.spin()
-    # pub = rospy.Publisher('/vel_cmd', Float32, queue_size=10)
-    # rate = rospy.Rate(4)
-
-    # vel = 0.0
-
-    # while not rospy.is_shutdown():
-    #     vel = 8 if vel == 0.0 else 0.0
-    #     msg = Float32(data=vel)
-
-    #     pub.publish(msg)
-    #     rospy.loginfo("Published velocity: %.2f", vel)
-
-    #     rate.sleep()
 
 if __name__ == "__main__":
     main()
