@@ -2,6 +2,8 @@
 
 A 4WD mobile robot buggy running SLAM for real time motion planning.
 
+<img src="images\isometric.jpg" width="450" alt="Iris Plot">
+
 ## Instructions
 
 1. Run GUI enabled docker container:
