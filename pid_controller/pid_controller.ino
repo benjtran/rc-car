@@ -24,29 +24,16 @@ const int encb[] = {43, 51, 42, 48};
 
 // globals
 long prev_t = 0;
-volatile int pos[] = {0, 0, 0, 0};
+volatile long pos[] = {0, 0, 0, 0};
+long prev_pos[] = {0, 0, 0, 0};
 
-// targets
-float target_f[] = {0.0, 0.0, 0.0, 0.0};
-long target[] = {0, 0, 0, 0};
+// target velocities in m/s
+float target_vel[] = {0.0, 0.0, 0.0, 0.0};
 
-void setTarget(float t, float dt,  float vel[]) {
-  float position_change[4] = {0.0, 0.0, 0.0, 0.0};
-  float pulses_per_turn = 508;
-  float pulses_per_meter = pulses_per_turn * 4.75089382365;
-
-  for (int i = 0; i < NUMMOTORS; i++) {
-   position_change[i] = vel[i] * dt * pulses_per_meter; 
-  }
-
-  for (int i = 0; i < 4; i++) {
-    target_f[i] = target_f[i] + position_change[i];
-  }
-  target[0] = (long) target_f[0];
-  target[1] = (long) target_f[1];
-  target[2] = (long) target_f[2];
-  target[3] = (long) target_f[3];
-}
+// Function declarations
+template <int j>
+void readEncoder();
+void setMotor(int dir, int pwm_val, int en, int ina, int inb);
 
 class Controller {
   private:
@@ -62,18 +49,18 @@ class Controller {
     umax = umax_new;
   }
 
-  void getSignal(int value, int target, float dt, int &pwr, int &dir) {
-    // error
-    int e = target - value;
+  void getSignal(float actual_vel, float target_vel, float dt, int &pwr, int &dir) {
+    // error in velocity
+    float e = target_vel - actual_vel;
 
-      // derivative
-    float dedt = (e-e_prev)/(dt);
+    // derivative
+    float dedt = (e - e_prev) / dt;
 
     // integral
-    e_integral = e_integral + e*dt;
+    e_integral = e_integral + e * dt;
 
     // control signal
-    float u = kp*e + kd*dedt + ki*e_integral;
+    float u = kp * e + kd * dedt + ki * e_integral;
 
     // motor power
     pwr = (int) fabs(u);
@@ -96,18 +83,20 @@ Controller controller[NUMMOTORS];
 void setup() {
   Serial.begin(9600);
   delay(3000);
+  Serial.println("BOOT OKAY");
   for (int i = 0; i < NUMMOTORS; i++) {
     pinMode(in1[i], OUTPUT);
     pinMode(in2[i], OUTPUT);
     pinMode(en[i], OUTPUT);
-    pinMode(enca[i],INPUT);
-    pinMode(encb[i],INPUT);
+    pinMode(enca[i], INPUT);
+    pinMode(encb[i], INPUT);
   }
 
-  controller[0].setParams(2, 0.1, 0, 255);
-  controller[1].setParams(2, 0.1, 0, 255);
-  controller[2].setParams(2, 0.1, 0, 255);
-  controller[3].setParams(2, 0.1, 0, 255);
+  // velocity control
+  controller[0].setParams(100, 5, 10, 255);
+  controller[1].setParams(100, 5, 10, 255);
+  controller[2].setParams(100, 5, 10, 255);
+  controller[3].setParams(100, 5, 10, 255);
 
   attachInterrupt(digitalPinToInterrupt(enca[0]), readEncoder<0>, RISING);
   attachInterrupt(digitalPinToInterrupt(enca[1]), readEncoder<1>, RISING);
@@ -115,23 +104,25 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(enca[3]), readEncoder<3>, RISING);
 }
 
+float vel[NUMMOTORS] = {0, 0, 0, 0};
+
 void loop() {
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-
+  
     int idx = 0;
-    char *token;
     char buf[50];
-
     command.toCharArray(buf, sizeof(buf));
-    token = strtok(buf, ",");
-
+  
+    char *token = strtok(buf, ",");
     while (token != NULL && idx < 4) {
-      vel[idx++] = atof(token);
+      vel[idx] = atof(token);
+      target_vel[idx] = vel[idx];
+      idx++;
       token = strtok(NULL, ",");
     }
-
+  
     if (idx == 4) {
       Serial.print("Received velocities: ");
       for (int i = 0; i < 4; i++) {
@@ -139,39 +130,54 @@ void loop() {
         Serial.print(" ");
       }
       Serial.println();
-    } else {
-      Serial.println("Invalid velocity command");
     }
   }
 
   long curr_t = micros();
-  float dt = ((float) (curr_t - prev_t))/(1.0e6);
-  prev_t = curr_t;
+  float dt = ((float) (curr_t - prev_t)) / (1.0e6);
+  
+  // Only update at fixed intervals (e.g., 20ms = 50Hz)
+  if (dt >= 0.02) {
+    prev_t = curr_t;
+    
+    // Calculate actual velocities from encoder changes
+    float pulses_per_turn = 508;
+    float pulses_per_meter = pulses_per_turn * 4.75089382365;
+    
+    int posi[NUMMOTORS];
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      for (int i = 0; i < NUMMOTORS; i++) {
+        posi[i] = pos[i];
+      }
+    }
+    
+    float actual_vel[NUMMOTORS];
+    for (int i = 0; i < NUMMOTORS; i++) {
+      long delta_pos = posi[i] - prev_pos[i];
+      actual_vel[i] = (delta_pos / pulses_per_meter) / dt;
+      prev_pos[i] = posi[i];
+    }
 
-  // targets
-  setTarget(curr_t/1.0e6, dt, vel);
+    // Control based on velocity
+    for (int i = 0; i < NUMMOTORS; i++) {
+      int pwr, dir;
+      controller[i].getSignal(actual_vel[i], target_vel[i], dt, pwr, dir);
+      setMotor(dir, pwr, en[i], in1[i], in2[i]);
+    }
 
-  int posi[NUMMOTORS];
-  for (int i = 0; i < NUMMOTORS; i++) {
-    posi[i] = pos[i];
+    // Debug output
+    Serial.print("Vel: ");
+    for (int i = 0; i < NUMMOTORS; i++) {
+      Serial.print(actual_vel[i], 3);
+      Serial.print(" ");
+    }
+    Serial.print(" Target: ");
+    Serial.print(target_vel[0], 3);
+    Serial.println();
   }
-
-  for (int i = 0; i < NUMMOTORS; i++) {
-    int pwr, dir;
-    controller[i].getSignal(posi[i], target[i], dt, pwr, dir);
-    setMotor(dir, pwr, en[i], in1[i], in2[i]);
-  }
-
-  // for (int i = 0; i < NUMMOTORS; i++) {
-  //   Serial.print(target[i]);
-  //   Serial.print(" ");
-  //   Serial.print(posi[i]);
-  //   Serial.print(" ");
-  // }
-  // Serial.println();
 } 
 
-void setMotor(int dir, int pwm_val, int en, int ina, int inb ){
+void setMotor(int dir, int pwm_val, int en, int ina, int inb) {
   analogWrite(en, pwm_val);
   if (dir == 1) {
     digitalWrite(ina, HIGH);
@@ -188,7 +194,7 @@ void setMotor(int dir, int pwm_val, int en, int ina, int inb ){
 template <int j>
 void readEncoder() {
   int b = digitalRead(encb[j]);
-  if (b>0) {
+  if (b > 0) {
     pos[j]++;
   } else {
     pos[j]--;
