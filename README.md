@@ -2,7 +2,17 @@
 
 A 4WD mobile robot buggy running SLAM for real time motion planning.
 
-<img src="images\isometric.jpg" width="450" alt="Iris Plot">
+<figure>
+    <img src="images\isometric.jpg" width="450" alt="Iris Plot">
+    <figcaption>Figure 1: Isometric View of Robot</figcaption>
+</figure>
+
+
+<figure>
+    <img src="images\demo.gif" width="450" alt="Iris Plot">
+    <figcaption>Figure 2: Demo of Robot in Random Environment</figcaption>
+</figure>
+
 
 ## Instructions
 
