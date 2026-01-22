@@ -3,11 +3,11 @@ import rospy
 import tf
 import tf.transformations as tft
 import numpy as np
-from std_msgs.msg import Float32
 from std_msgs.msg import Float32MultiArray
 from std_msgs.msg import Header
 from nav_msgs.msg import OccupancyGrid
 from visualization_msgs.msg import Marker, MarkerArray
+import heapq
 
 class MapPoseReader:
     def __init__(self):
@@ -20,9 +20,9 @@ class MapPoseReader:
     def map_callback(self, msg):
         self.map = msg
         self.map_received = True
-        self.map_updated = True
     
     def world_to_map(self, x, y):
+        if not self.map: return None, None
         origin = self.map.info.origin.position
         resolution = self.map.info.resolution
         width = self.map.info.width
@@ -39,15 +39,13 @@ class MapPoseReader:
     def update_pose(self):
         if not self.map_received:
             rospy.loginfo_throttle(5, "Waiting for map...")
-            return
+            return False
 
         try:
             (trans, rot) = self.tf_listener.lookupTransform(
-                "map",
-                "base_link",
-                rospy.Time(0)
+                "map", "base_link", rospy.Time(0)
             )
-        except tf.Exception:
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             rospy.logwarn_throttle(2, "TF not available")
             return False
 
@@ -61,18 +59,15 @@ class CostMap:
         self.reader = reader
         self.robot_radius = robot_radius
         self.costmap = None
+        self.safety_costmap = None 
         self.costmap_pub = rospy.Publisher(
             "/costmap", OccupancyGrid, queue_size=1, latch=True
         )
-        self.map_stamp = None
 
     def update(self):
         map_msg = self.reader.map
         if map_msg is None:
             return False
-
-        # Always recompute on every call for real-time updates
-        self.map_stamp = map_msg.header.stamp
 
         w = map_msg.info.width
         h = map_msg.info.height
@@ -82,14 +77,12 @@ class CostMap:
         grid = np.array(map_msg.data, dtype=np.int16).reshape((h, w))
         costmap = np.zeros((h, w), dtype=np.uint8)
 
-        # Mark obstacles and unknowns
         obstacle_mask = (grid == 100)
         unknown_mask = (grid == -1)
 
-        costmap[obstacle_mask] = 254
-        costmap[unknown_mask] = 50
+        costmap[obstacle_mask] = 254 
+        costmap[unknown_mask] = 50   
 
-        # Inflate obstacles (NumPy-only, local)
         obstacle_indices = np.argwhere(obstacle_mask)
 
         for oy, ox in obstacle_indices:
@@ -106,10 +99,34 @@ class CostMap:
                         costmap[y, x] = 253
 
         self.costmap = costmap
+        self.safety_costmap = self.create_safety_costmap(costmap, inflation_cells)
         self.publish()
         return True
+    
+    def create_safety_costmap(self, costmap, inflation_cells):
+        h, w = costmap.shape
+        safety_map = np.copy(costmap)
+        safety_padding = max(5, inflation_cells)
+        
+        obstacle_cells = np.argwhere(costmap >= 253)
+        
+        for oy, ox in obstacle_cells:
+            y0 = max(0, oy - safety_padding)
+            y1 = min(h, oy + safety_padding + 1)
+            x0 = max(0, ox - safety_padding)
+            x1 = min(w, ox + safety_padding + 1)
+            
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    if safety_map[y, x] >= 253: continue
+                    dist = np.hypot(y - oy, x - ox)
+                    if dist <= safety_padding:
+                        gradient_cost = int(250 - (dist / safety_padding) * 240)
+                        safety_map[y, x] = max(safety_map[y, x], gradient_cost)
+        return safety_map
 
     def publish(self):
+        if self.costmap is None: return
         msg = OccupancyGrid()
         msg.header = Header(stamp=rospy.Time.now(), frame_id="map")
         msg.info = self.reader.map.info
@@ -117,103 +134,119 @@ class CostMap:
         self.costmap_pub.publish(msg)
     
     def is_robot_in_danger(self, robot_x, robot_y):
-        """
-        Check if robot is currently in an inflated obstacle cell or too close to one.
-        Returns True if robot needs to escape.
-        """
-        if self.costmap is None:
-            return False
-        
+        if self.costmap is None: return False
         map_msg = self.reader.map
         res = map_msg.info.resolution
         mx = int((robot_x - map_msg.info.origin.position.x) / res)
         my = int((robot_y - map_msg.info.origin.position.y) / res)
-        
         h, w = self.costmap.shape
-        if mx < 0 or my < 0 or mx >= w or my >= h:
-            return False
+        if mx < 0 or my < 0 or mx >= w or my >= h: return False
         
-        # Check current cell and immediate neighbors (3x3 area)
         for dy in range(-1, 2):
             for dx in range(-1, 2):
-                check_x = mx + dx
-                check_y = my + dy
-                
-                if 0 <= check_x < w and 0 <= check_y < h:
-                    # Check if in inflated obstacle (253) or actual obstacle (254)
-                    if self.costmap[check_y, check_x] >= 253:
-                        return True
-        
+                cx, cy = mx + dx, my + dy
+                if 0 <= cx < w and 0 <= cy < h:
+                    if self.costmap[cy, cx] == 254: return True
         return False
     
+    def is_path_safe(self, start_x, start_y, end_x, end_y):
+        """Checks if a straight line between two points crosses obstacles"""
+        if self.costmap is None: return False
+        
+        map_msg = self.reader.map
+        res = map_msg.info.resolution
+        x0 = int((start_x - map_msg.info.origin.position.x) / res)
+        y0 = int((start_y - map_msg.info.origin.position.y) / res)
+        x1 = int((end_x - map_msg.info.origin.position.x) / res)
+        y1 = int((end_y - map_msg.info.origin.position.y) / res)
+        
+        h, w = self.costmap.shape
+        
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        x, y = x0, y0
+        sx = -1 if x0 > x1 else 1
+        sy = -1 if y0 > y1 else 1
+        
+        if dx > dy:
+            err = dx / 2.0
+            while x != x1:
+                if 0 <= x < w and 0 <= y < h:
+                    if self.costmap[y, x] >= 253: return False
+                err -= dy
+                if err < 0:
+                    y += sy
+                    err += dx
+                x += sx
+        else:
+            err = dy / 2.0
+            while y != y1:
+                if 0 <= x < w and 0 <= y < h:
+                    if self.costmap[y, x] >= 253: return False
+                err -= dx
+                if err < 0:
+                    x += sx
+                    err += dy
+                y += sy
+        return True
+
     def get_escape_direction(self, robot_x, robot_y, robot_yaw):
-        """
-        Find the best direction to escape from obstacle.
-        Returns angle in radians in the map frame to move towards.
-        Robot front faces -X, so we need to find direction with most free space.
-        """
         map_msg = self.reader.map
         res = map_msg.info.resolution
         mx = int((robot_x - map_msg.info.origin.position.x) / res)
         my = int((robot_y - map_msg.info.origin.position.y) / res)
-        
         h, w = self.costmap.shape
-        
-        # Sample directions around robot in map frame
         best_direction = None
         max_free_distance = 0
+        robot_front_direction = robot_yaw + np.pi
         
-        # Test 16 directions in map frame
         for angle in np.linspace(0, 2*np.pi, 16, endpoint=False):
             free_distance = 0
-            # Check along this direction for free space
-            for dist in range(1, 30):  # Check up to 30 cells away
+            for dist in range(1, 20):
                 test_x = mx + int(dist * np.cos(angle))
                 test_y = my + int(dist * np.sin(angle))
-                
-                if test_x < 0 or test_y < 0 or test_x >= w or test_y >= h:
-                    break
-                
-                if self.costmap[test_y, test_x] == 0:  # Free space
-                    free_distance += 1
-                else:
-                    break
+                if test_x < 0 or test_y < 0 or test_x >= w or test_y >= h: break
+                if self.costmap[test_y, test_x] < 253: free_distance += 1
+                else: break
+            
+            angle_diff = abs(self.normalize_angle(angle - robot_front_direction))
+            if angle_diff > np.pi / 2: free_distance *= 1.5 
             
             if free_distance > max_free_distance:
                 max_free_distance = free_distance
                 best_direction = angle
         
-        if best_direction is None:
-            # Emergency fallback: move opposite to current heading
-            # Robot faces -X, so reverse means go in +X direction in map frame
-            # Current heading in map frame
-            best_direction = robot_yaw + np.pi
-        
-        rospy.loginfo("Escape direction: %.2f rad, free distance: %d cells", 
-                     best_direction, max_free_distance)
-        
+        if best_direction is None: best_direction = robot_yaw
         return best_direction
-
+    
+    def normalize_angle(self, angle):
+        while angle > np.pi: angle -= 2 * np.pi
+        while angle < -np.pi: angle += 2 * np.pi
+        return angle
 
 class AStarPlanner:
-    def __init__(self, costmap):
+    def __init__(self, costmap, safety_costmap=None):
         self.costmap = costmap
+        self.safety_costmap = safety_costmap if safety_costmap is not None else costmap
         self.h, self.w = costmap.shape
-        self.TRAVERSABLE_COST = 0  # Only white space
 
     def plan(self, start, goal):
-        import heapq
-
-        if start == goal:
-            return [start]
+        if start == goal: return [start]
 
         open_set = []
         heapq.heappush(open_set, (0, start))
         came_from = {}
         g_score = {start: 0}
 
-        def heuristic(a, b):
-            return np.hypot(a[0] - b[0], a[1] - b[1])
+        def heuristic(a, b): return np.hypot(a[0] - b[0], a[1] - b[1])
+        
+        def get_traversal_cost(pos):
+            x, y = pos
+            val = self.costmap[y, x]
+            if val == 254: return float('inf')
+            base_cost = 50.0 if val == 253 else 1.0
+            safety_val = self.safety_costmap[y, x]
+            return base_cost + (safety_val * 0.1)
 
         while open_set:
             _, current = heapq.heappop(open_set)
@@ -227,258 +260,105 @@ class AStarPlanner:
             cx, cy = current
             for dx in [-1,0,1]:
                 for dy in [-1,0,1]:
-                    if dx == 0 and dy == 0:
-                        continue
+                    if dx == 0 and dy == 0: continue
                     nx, ny = cx + dx, cy + dy
                     if 0 <= nx < self.w and 0 <= ny < self.h:
-                        if self.costmap[ny, nx] != self.TRAVERSABLE_COST:
-                            continue  # STRICT: only white space
                         neighbor = (nx, ny)
-                        tentative_g = g_score[current] + np.hypot(dx, dy)
+                        traversal_cost = get_traversal_cost(neighbor)
+                        if traversal_cost == float('inf'): continue
+                        move_cost = np.hypot(dx, dy) * traversal_cost
+                        tentative_g = g_score[current] + move_cost
                         if neighbor not in g_score or tentative_g < g_score[neighbor]:
                             g_score[neighbor] = tentative_g
                             f = tentative_g + heuristic(neighbor, goal)
                             heapq.heappush(open_set, (f, neighbor))
                             came_from[neighbor] = current
-        return []  # No path found
+        return []
+
+class IncrementalController:
+    def __init__(self, costmap, reader):
+        self.costmap = costmap
+        self.reader = reader
+        self.min_motor_vel = 0.1
+        self.position_tolerance = 0.05
+        self.angle_tolerance = 0.08
+        self.state = "IDLE"
+        self.target_position = None
+        self.target_yaw = None
+        self.move_start_time = None
+        
+    def normalize_angle(self, angle):
+        while angle > np.pi: angle -= 2 * np.pi
+        while angle < -np.pi: angle += 2 * np.pi
+        return angle
     
-    def is_reachable(self, start, goal, max_iterations=500):
-        """
-        Quick reachability check using BFS with limited iterations.
-        Returns True if goal is reachable from start through free space.
-        Reduced max_iterations for faster real-time performance.
-        """
-        from collections import deque
+    def set_linear_target(self, current_x, current_y, current_yaw, distance):
+        forward_direction = current_yaw + np.pi
+        target_x = current_x + distance * np.cos(forward_direction)
+        target_y = current_y + distance * np.sin(forward_direction)
+        self.target_position = (target_x, target_y)
+        self.target_distance = distance
+        self.state = "MOVING"
+        self.move_start_time = rospy.Time.now()
+    
+    def set_angular_target(self, current_yaw, delta_yaw):
+        self.target_yaw = self.normalize_angle(current_yaw + delta_yaw)
+        self.state = "TURNING"
+        self.move_start_time = rospy.Time.now()
+    
+    def compute_command(self, current_x, current_y, current_yaw):
+        if self.state == "IDLE": return [0.0, 0.0, 0.0, 0.0]
         
-        if start == goal:
-            return True
-        
-        visited = set()
-        queue = deque([start])
-        visited.add(start)
-        iterations = 0
-        
-        while queue and iterations < max_iterations:
-            iterations += 1
-            cx, cy = queue.popleft()
+        elif self.state == "MOVING":
+            target_x, target_y = self.target_position
+            dist = np.hypot(target_x - current_x, target_y - current_y)
+            elapsed = (rospy.Time.now() - self.move_start_time).to_sec()
             
-            # Check 8-connected neighbors
-            for dx in [-1, 0, 1]:
-                for dy in [-1, 0, 1]:
-                    if dx == 0 and dy == 0:
-                        continue
-                    
-                    nx, ny = cx + dx, cy + dy
-                    
-                    # Check bounds
-                    if not (0 <= nx < self.w and 0 <= ny < self.h):
-                        continue
-                    
-                    # Check if traversable (only free space)
-                    if self.costmap[ny, nx] != self.TRAVERSABLE_COST:
-                        continue
-                    
-                    neighbor = (nx, ny)
-                    
-                    # Found the goal
-                    if neighbor == goal:
-                        return True
-                    
-                    # Add to queue if not visited
-                    if neighbor not in visited:
-                        visited.add(neighbor)
-                        queue.append(neighbor)
+            if elapsed > 2.0 or dist < self.position_tolerance:
+                self.state = "IDLE"
+                return [0.0, 0.0, 0.0, 0.0]
+            
+            vel = self.min_motor_vel if self.target_distance > 0 else -self.min_motor_vel
+            return [vel, vel, vel, vel]
         
-        return False
-
-
-class PurePursuitController:
-    """
-    Pure Pursuit controller for 4-wheel skid-steer robot.
-    Converts path following into differential drive commands, then into wheel velocities.
-    Robot orientation: Front faces -X, drives forward in -X direction.
-    Motor limits: Min 0.1 m/s, Max 0.3 m/s
-    """
-    def __init__(self, lookahead_distance=0.2, wheel_base=0.3, max_linear_vel=0.2, max_angular_vel=0.5):
-        self.lookahead_distance = lookahead_distance
-        self.wheel_base = wheel_base
-        self.max_linear_vel = max_linear_vel  # Keep under 0.3 motor limit
-        self.max_angular_vel = max_angular_vel  # Adjusted for 0.3 motor limit
-        self.max_motor_vel = 0.3  # Hardware upper limit
-        self.min_motor_vel = 0.1  # Hardware lower limit
-        self.goal_threshold = 0.15  # Distance to consider goal reached
+        elif self.state == "TURNING":
+            angle_error = self.normalize_angle(self.target_yaw - current_yaw)
+            elapsed = (rospy.Time.now() - self.move_start_time).to_sec()
+            
+            if elapsed > 2.0 or abs(angle_error) < self.angle_tolerance:
+                self.state = "IDLE"
+                return [0.0, 0.0, 0.0, 0.0]
+            
+            vel = self.min_motor_vel
+            if angle_error > 0: return [-vel, vel, -vel, vel]
+            else: return [vel, -vel, vel, -vel]
         
-        self.lookahead_pub = rospy.Publisher("/lookahead_point", Marker, queue_size=1)
-
-    def find_lookahead_point(self, path, robot_x, robot_y):
-        """Find the point on the path at lookahead distance."""
-        if not path or len(path) < 2:
-            return None
-        
-        # Find the closest point on path first
-        min_dist = float('inf')
-        closest_idx = 0
-        for i, (px, py) in enumerate(path):
-            dist = np.hypot(px - robot_x, py - robot_y)
-            if dist < min_dist:
-                min_dist = dist
-                closest_idx = i
-        
-        # Search forward from closest point for lookahead point
-        for i in range(closest_idx, len(path)):
-            px, py = path[i]
-            dist = np.hypot(px - robot_x, py - robot_y)
-            if dist >= self.lookahead_distance:
-                self.publish_lookahead(px, py)
-                return (px, py)
-        
-        # If no point at lookahead distance, return last point
-        self.publish_lookahead(path[-1][0], path[-1][1])
-        return path[-1]
-
-    def publish_lookahead(self, x, y):
-        """Visualize lookahead point in RViz."""
-        marker = Marker()
-        marker.header.frame_id = "map"
-        marker.header.stamp = rospy.Time.now()
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-        marker.pose.position.x = x
-        marker.pose.position.y = y
-        marker.pose.position.z = 0.0
-        marker.scale.x = 0.15
-        marker.scale.y = 0.15
-        marker.scale.z = 0.15
-        marker.color.a = 1.0
-        marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
-        self.lookahead_pub.publish(marker)
-
-    def compute_velocity_command(self, path, robot_x, robot_y, robot_yaw):
-        """
-        Compute wheel velocities to follow the path.
-        Robot orientation: Front faces -X, Right side faces +Y
-        Robot drives FORWARD (in -X direction) to follow path.
-        Motor limits: Min 0.1 m/s, Max 0.3 m/s
-        Returns: [FL, FR, RL, RR] wheel velocities in m/s, or None if goal reached.
-        """
-        if not path:
-            return None
-        
-        # Check if we've reached the goal
-        goal_x, goal_y = path[-1]
-        dist_to_goal = np.hypot(goal_x - robot_x, goal_y - robot_y)
-        if dist_to_goal < self.goal_threshold:
-            rospy.loginfo("Goal reached!")
-            return [0.0, 0.0, 0.0, 0.0]
-        
-        # Find lookahead point
-        lookahead = self.find_lookahead_point(path, robot_x, robot_y)
-        if lookahead is None:
-            return None
-        
-        target_x, target_y = lookahead
-        
-        # Vector from robot to target in map frame
-        dx = target_x - robot_x
-        dy = target_y - robot_y
-        
-        # Angle to target in map frame
-        angle_to_target = np.arctan2(dy, dx)
-        
-        # Robot's front direction in map frame
-        # Since front faces -X, the front direction is yaw + pi
-        robot_front_direction = robot_yaw + np.pi
-        
-        # Angle difference between where we want to go and where front is pointing
-        angle_diff = angle_to_target - robot_front_direction
-        
-        # Normalize to [-pi, pi]
-        while angle_diff > np.pi:
-            angle_diff -= 2 * np.pi
-        while angle_diff < -np.pi:
-            angle_diff += 2 * np.pi
-        
-        # Distance to target
-        distance_to_target = np.hypot(dx, dy)
-        
-        # Pure pursuit: angular velocity proportional to angle error
-        # Positive angle_diff means target is to the left, need to turn left (CCW)
-        angular_vel = 2.0 * angle_diff  # Proportional control
-        angular_vel = np.clip(angular_vel, -self.max_angular_vel, self.max_angular_vel)
-        
-        # Linear velocity - move forward
-        linear_vel = self.max_linear_vel
-        
-        # Slow down when turning sharply
-        if abs(angle_diff) > 0.5:  # ~30 degrees
-            linear_vel *= 0.6
-        
-        # Convert to wheel velocities for skid-steer
-        # For skid-steer: v_left = v - ω*w/2, v_right = v + ω*w/2
-        # Positive linear_vel = forward in -X direction
-        # Positive angular_vel = turn left (CCW)
-        v_left = linear_vel - angular_vel * self.wheel_base / 2.0
-        v_right = linear_vel + angular_vel * self.wheel_base / 2.0
-        
-        # Apply motor limits with dead zone handling
-        def apply_motor_limits(vel):
-            if abs(vel) < 0.01:  # Essentially zero
-                return 0.0
-            elif abs(vel) < self.min_motor_vel:  # Below minimum but not zero
-                return self.min_motor_vel * np.sign(vel)
-            else:  # Normal operation
-                return np.clip(vel, -self.max_motor_vel, self.max_motor_vel)
-        
-        v_left = apply_motor_limits(v_left)
-        v_right = apply_motor_limits(v_right)
-        
-        rospy.loginfo_throttle(
-            2,
-            "Target angle: %.2f, Robot front: %.2f, Diff: %.2f, Linear: %.2f, Angular: %.2f",
-            angle_to_target, robot_front_direction, angle_diff, linear_vel, angular_vel
-        )
-        
-        # Return [FL, FR, RL, RR]
-        return [v_left, v_right, v_left, v_right]
-
+        return [0.0, 0.0, 0.0, 0.0]
 
 class Navigator:
-    def __init__(self, costmap):
+    def __init__(self, costmap, reader):
         self.costmap = costmap
+        self.reader = reader
         self.frontier_pub = rospy.Publisher("/frontiers", MarkerArray, queue_size=1)
         self.path_pub = rospy.Publisher("/planned_path", Marker, queue_size=1)
         self.vel_pub = rospy.Publisher('/vel_cmd', Float32MultiArray, queue_size=10)
         
         self.current_path = []
         self.current_goal = None
+        self.current_waypoint_idx = 0
         self.FRONTIER_WINDOW = 80
         
-        # Spinning behavior
-        self.is_spinning = False
-        self.spin_start_time = None
-        self.spin_duration = 12.56  # 2*pi / 0.5 rad/s = ~12.56 seconds for 360 degrees
-        self.spin_angular_velocity = 0.5  # rad/s - achievable with 0.15 m/s wheel speed
-        self.spin_threshold = 0.3  # Start spinning when within 0.3m of goal
+        self.controller = IncrementalController(costmap, reader)
+        self.behavior_state = "PLANNING"
+        self.escape_count = 0
+        self.last_replan_time = rospy.Time.now()
         
-        # Escape behavior
-        self.is_escaping = False
-        self.escape_direction = None
+        # Spinning vars (for recovery only)
+        self.total_spin = 0.0
+        self.last_yaw = None
         
-        # Exploration state
-        self.exploration_complete = False
-        
-        # Pure Pursuit controller with slower speeds
-        self.controller = PurePursuitController(
-            lookahead_distance=0.2,
-            wheel_base=0.3,
-            max_linear_vel=0.2,  # Within 0.3 motor limit
-            max_angular_vel=0.5  # Adjusted for 0.3 motor limit
-        )
-        
-        rospy.Timer(rospy.Duration(0.1), self.control_loop)  # 10 Hz control
-        rospy.Timer(rospy.Duration(0.5), self.planning_loop)  # 2 Hz planning (faster updates)
+        rospy.Timer(rospy.Duration(0.1), self.control_loop)
+        rospy.Timer(rospy.Duration(0.5), self.planning_loop)
 
     def get_grid(self):
         map_msg = self.costmap.reader.map
@@ -500,80 +380,59 @@ class Navigator:
         return mx, my
 
     def find_frontiers(self, grid, w, h, rx, ry):
-        """
-        Find frontier cells that are:
-        1. Free space (grid value 0)
-        2. Adjacent to unknown space (grid value -1)
-        3. NOT in inflated obstacle areas (costmap value 0)
-        4. Reachable from robot position through free space
-        """
         frontiers = []
         xmin = max(1, rx - self.FRONTIER_WINDOW)
         xmax = min(w - 1, rx + self.FRONTIER_WINDOW)
         ymin = max(1, ry - self.FRONTIER_WINDOW)
         ymax = min(h - 1, ry + self.FRONTIER_WINDOW)
 
-        # Create A* planner for reachability checks
-        astar = AStarPlanner(self.costmap.costmap)
-        robot_pos = (rx, ry)
+        min_dist_cells = int(0.5 / self.costmap.reader.map.info.resolution)
 
-        for y in range(ymin, ymax):
-            for x in range(xmin, xmax):
-                # Must be free space in the original map
-                if grid[y, x] != 0:
+        for y in range(ymin, ymax, 2):
+            for x in range(xmin, xmax, 2):
+                if grid[y, x] != 0: continue 
+
+                dist_sq = (x - rx)**2 + (y - ry)**2
+                if dist_sq < min_dist_cells**2:
                     continue
                 
-                # Must be adjacent to unknown space
-                if not np.any(grid[y-1:y+2, x-1:x+2] == -1):
-                    continue
+                has_unknown_neighbor = False
+                for dy in range(-1, 2):
+                    for dx in range(-1, 2):
+                        if grid[y+dy, x+dx] == -1:
+                            has_unknown_neighbor = True
+                            break
+                    if has_unknown_neighbor: break
                 
-                # Must be traversable in the costmap (not in inflated obstacle area)
-                if self.costmap.costmap[y, x] != 0:
-                    continue
-                
-                # Must be reachable from robot position through free space
-                if not astar.is_reachable(robot_pos, (x, y)):
-                    continue
+                if not has_unknown_neighbor: continue
+                if self.costmap.costmap[y, x] > 50: continue 
                 
                 frontiers.append((x, y))
-        
         return frontiers
 
     def select_frontier_with_path(self, robot_x, robot_y):
-        if not self.costmap.reader.map_received:
-            return None, []
-
+        if not self.costmap.reader.map_received: return None, []
         grid, w, h = self.get_grid()
         rx, ry = self.world_to_grid(robot_x, robot_y)
-
-        if rx < 0 or ry < 0 or rx >= w or ry >= h:
-            return None, []
-
-        # Check if robot is in safe location
-        if self.costmap.costmap[ry, rx] != 0:
-            rospy.logwarn("Robot at (%d, %d) is not in free space (cost: %d)! Skipping frontier search.",
-                         rx, ry, self.costmap.costmap[ry, rx])
-            return None, []
+        if rx < 0 or ry < 0 or rx >= w or ry >= h: return None, []
 
         frontiers = self.find_frontiers(grid, w, h, rx, ry)
         world_frontiers = [self.grid_to_world(mx, my) for mx, my in frontiers]
         self.publish_frontiers(world_frontiers)
 
-        if not world_frontiers:
-            return None, []
+        if not world_frontiers: return None, []
 
-        start_mx, start_my = self.world_to_grid(robot_x, robot_y)
+        start_mx, start_my = rx, ry
         frontiers_sorted = sorted(
             world_frontiers,
             key=lambda f: np.hypot(f[0] - robot_x, f[1] - robot_y)
-        )[:5]
+        )[:3]
 
-        astar = AStarPlanner(self.costmap.costmap)
+        astar = AStarPlanner(self.costmap.costmap, self.costmap.safety_costmap)
 
         for fx, fy in frontiers_sorted:
             goal_mx, goal_my = self.world_to_grid(fx, fy)
-            if goal_mx < 0 or goal_my < 0:
-                continue
+            if goal_mx < 0: continue
 
             path_cells = astar.plan((start_mx, start_my), (goal_mx, goal_my))
             if path_cells:
@@ -585,6 +444,7 @@ class Navigator:
     def publish_frontiers(self, world_frontiers):
         markers = MarkerArray()
         for i, (x, y) in enumerate(world_frontiers):
+            if i > 50: break
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = rospy.Time.now()
@@ -593,10 +453,9 @@ class Navigator:
             marker.action = Marker.ADD
             marker.pose.position.x = x
             marker.pose.position.y = y
-            marker.pose.position.z = 0.0
-            marker.scale.x = 0.08
-            marker.scale.y = 0.08
-            marker.scale.z = 0.08
+            marker.scale.x = 0.1
+            marker.scale.y = 0.1
+            marker.scale.z = 0.1
             marker.color.a = 1.0
             marker.color.r = 1.0
             marker.color.g = 0.0
@@ -605,8 +464,7 @@ class Navigator:
         self.frontier_pub.publish(markers)
 
     def publish_path(self, path_world):
-        if not path_world:
-            return
+        if not path_world: return
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = rospy.Time.now()
@@ -615,234 +473,199 @@ class Navigator:
         marker.type = Marker.LINE_STRIP
         marker.action = Marker.ADD
         marker.scale.x = 0.05
-        marker.color.r = 0.0
-        marker.color.g = 0.0
         marker.color.b = 1.0
         marker.color.a = 1.0
         from geometry_msgs.msg import Point
         for x, y in path_world:
-            p = Point()
-            p.x = x
-            p.y = y
-            p.z = 0.0
+            p = Point(x=x, y=y, z=0.0)
             marker.points.append(p)
+        self.path_pub.publish(marker)
+        
+    def clear_path(self):
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "path"
+        marker.id = 0
+        marker.action = Marker.DELETE 
         self.path_pub.publish(marker)
 
     def control_loop(self, event):
-        """High-frequency loop for path following control."""
-        x, y, yaw = self.costmap.reader.pose
-        
-        # PRIORITY 1: Check if robot is in danger (in inflated obstacle)
-        if self.costmap.is_robot_in_danger(x, y):
-            if not self.is_escaping:
-                rospy.logwarn("DANGER! Robot in inflated obstacle area - initiating escape!")
-                self.is_escaping = True
-                self.escape_direction = self.costmap.get_escape_direction(x, y, yaw)
-            
-            # Move in escape direction (forward in -X direction)
-            # Robot: Front faces -X in map frame, Right faces +Y
-            # Motor limits: Min 0.1 m/s, Max 0.3 m/s
-            
-            # The escape_direction is in map frame, robot heading is also in map frame
-            # Robot's front is at yaw + pi (since front faces -X)
-            robot_front_direction = yaw + np.pi
-            
-            # Calculate angle difference between robot's front and escape direction
-            angle_diff = self.escape_direction - robot_front_direction
-            # Normalize to [-pi, pi]
-            while angle_diff > np.pi:
-                angle_diff -= 2 * np.pi
-            while angle_diff < -np.pi:
-                angle_diff += 2 * np.pi
-            
-            rospy.logwarn("Robot yaw: %.2f, Front dir: %.2f, Escape dir: %.2f, Angle diff: %.2f",
-                         yaw, robot_front_direction, self.escape_direction, angle_diff)
-            
-            # If we need to turn more than 90 degrees, it's faster to reverse
-            if abs(angle_diff) > np.pi / 2:
-                # Back up and turn
-                escape_linear_vel = -0.15  # Reverse
-                escape_angular_vel = 0.15 * np.sign(angle_diff)
-                rospy.logwarn("Reversing to escape!")
-            else:
-                # Turn towards escape direction and move forward
-                escape_linear_vel = 0.15  # Forward
-                escape_angular_vel = 0.0
-                
-                # Turn towards escape direction if needed
-                if abs(angle_diff) > 0.15:  # More than ~8 degrees off
-                    escape_angular_vel = 0.4 * np.sign(angle_diff)
-                    escape_linear_vel = 0.1  # Minimum speed while turning
-            
-            v_left = escape_linear_vel - escape_angular_vel * self.controller.wheel_base / 2.0
-            v_right = escape_linear_vel + escape_angular_vel * self.controller.wheel_base / 2.0
-            
-            # Apply motor limits (min 0.1, max 0.3)
-            def apply_motor_limits(vel):
-                if abs(vel) < 0.01:  # Essentially zero
-                    return 0.0
-                elif abs(vel) < 0.1:  # Below minimum but not zero
-                    return 0.1 * np.sign(vel)
-                else:  # Normal operation
-                    return np.clip(vel, -0.3, 0.3)
-            
-            v_left = apply_motor_limits(v_left)
-            v_right = apply_motor_limits(v_right)
-            
-            msg = Float32MultiArray()
-            msg.data = [v_left, v_right, v_left, v_right]
+        # Make decisions based off controller state, with escape having the highest priority
+        x, y, yaw = self.reader.pose
+    
+        if self.behavior_state == "COMPLETED":
+            msg = Float32MultiArray(data=[0.0, 0.0, 0.0, 0.0])
             self.vel_pub.publish(msg)
-            rospy.logwarn("ESCAPING - Angle diff: %.2f rad, Velocities: [%.2f, %.2f, %.2f, %.2f]", 
-                         angle_diff, *msg.data)
             return
-        else:
-            # Robot is safe - clear escape flag
-            if self.is_escaping:
-                rospy.loginfo("Escaped from danger zone - resuming normal operation")
-                self.is_escaping = False
-                self.escape_direction = None
-        
-        # PRIORITY 2: Handle spinning behavior
-        if self.is_spinning:
-            elapsed = (rospy.Time.now() - self.spin_start_time).to_sec()
-            if elapsed < self.spin_duration:
-                # Spin in place - calculate required wheel speeds for desired angular velocity
-                # ω = (v_right - v_left) / wheel_base
-                # For spin in place: v_right = -v_left
-                # So: ω = 2*v / wheel_base, therefore v = ω * wheel_base / 2
-                spin_wheel_speed = self.spin_angular_velocity * self.controller.wheel_base / 2.0
-                
-                # Ensure wheel speed is within motor limits [0.1, 0.3]
-                spin_wheel_speed = max(0.1, min(0.3, spin_wheel_speed))
-                
-                msg = Float32MultiArray()
-                # Left wheels backward, right wheels forward for CCW rotation
-                msg.data = [-spin_wheel_speed, spin_wheel_speed, -spin_wheel_speed, spin_wheel_speed]
-                self.vel_pub.publish(msg)
-                
-                # Calculate actual angular velocity achieved
-                actual_omega = 2.0 * spin_wheel_speed / self.controller.wheel_base
-                
-                rospy.loginfo("Spinning: %.1f%% complete (%.1f/%.1f sec) - Wheel speed: %.2f m/s, ω: %.2f rad/s", 
-                             (elapsed / self.spin_duration) * 100, elapsed, self.spin_duration,
-                             spin_wheel_speed, actual_omega)
+
+        if self.costmap.is_robot_in_danger(x, y):
+            if self.behavior_state != "ESCAPING":
+                rospy.logwarn("DANGER! STARTING ESCAPE")
+                self.behavior_state = "ESCAPING"
+                self.escape_count = 0
+                self.controller.state = "IDLE"
+            
+            if self.escape_count > 20: 
+                self.behavior_state = "PLANNING"
                 return
-            else:
-                # Finished spinning
-                self.is_spinning = False
-                self.spin_start_time = None
-                rospy.loginfo("Finished 360 spin!")
-                # Clear path so we can find next frontier
-                self.current_path = []
-                self.current_goal = None
+
+            if self.controller.state == "IDLE":
+                escape_dir = self.costmap.get_escape_direction(x, y, yaw)
+                robot_front = yaw + np.pi
+                angle_diff = self.controller.normalize_angle(escape_dir - robot_front)
+                
+                if abs(angle_diff) > np.pi / 2:
+                    self.controller.set_linear_target(x, y, yaw, -0.15)
+                elif abs(angle_diff) > 0.3:
+                    turn = np.clip(angle_diff, -0.3, 0.3)
+                    self.controller.set_angular_target(yaw, turn)
+                else:
+                    self.controller.set_linear_target(x, y, yaw, 0.10)
+                self.escape_count += 1
+            
+            cmd = self.controller.compute_command(x, y, yaw)
+            msg = Float32MultiArray(data=cmd)
+            self.vel_pub.publish(msg)
+            return
+
+        elif self.behavior_state == "ESCAPING":
+            rospy.loginfo("ESCAPED. Recovering...")
+            self.behavior_state = "RECOVERY"
+            self.last_yaw = yaw 
+            self.total_spin = 0
+            self.controller.state = "IDLE"
+
+        if self.behavior_state == "RECOVERY":
+            delta = self.controller.normalize_angle(yaw - self.last_yaw)
+            self.total_spin += abs(delta)
+            self.last_yaw = yaw
+
+            if self.total_spin > 1.0: 
+                self.behavior_state = "PLANNING"
+                self.total_spin = 0
                 return
-        
-        # PRIORITY 3: Check if we're close to goal and should start spinning
-        if self.current_goal is not None:
+
+            if self.controller.state == "IDLE":
+                 self.controller.set_angular_target(yaw, 0.5)
+            
+            cmd = self.controller.compute_command(x, y, yaw)
+            msg = Float32MultiArray(data=cmd)
+            self.vel_pub.publish(msg)
+            return
+
+        if self.behavior_state == "FOLLOWING_PATH":
+            if not self.current_path or self.current_goal is None:
+                self.behavior_state = "PLANNING"
+                return
+
             goal_x, goal_y = self.current_goal
             dist_to_goal = np.hypot(goal_x - x, goal_y - y)
-            
-            rospy.loginfo_throttle(2, "Distance to goal: %.2f m (threshold: %.2f m)", 
-                                  dist_to_goal, self.spin_threshold)
-            
-            if dist_to_goal < self.spin_threshold and not self.is_spinning:
-                rospy.loginfo("Close to frontier! Starting 360 degree scan...")
-                self.is_spinning = True
-                self.spin_start_time = rospy.Time.now()
+
+            if dist_to_goal < 0.20:
+                rospy.loginfo("GOAL REACHED. Planning next...")
+                self.behavior_state = "PLANNING"
+                self.controller.state = "IDLE"
+                self.current_path = []
                 return
-        
-        # PRIORITY 4: Normal path following
-        if not self.current_path:
-            # No path, stop
-            msg = Float32MultiArray()
-            msg.data = [0.0, 0.0, 0.0, 0.0]
+
+            if self.controller.state == "IDLE":
+                if self.current_waypoint_idx >= len(self.current_path):
+                    self.behavior_state = "PLANNING"
+                    return
+                
+                target_x, target_y = self.current_path[self.current_waypoint_idx]
+                dist_to_waypoint = np.hypot(target_x - x, target_y - y)
+                
+                if dist_to_waypoint < 0.10:
+                    self.current_waypoint_idx += 1
+                    return
+                
+                angle_to_target = np.arctan2(target_y - y, target_x - x)
+                robot_front = yaw + np.pi
+                angle_diff = self.controller.normalize_angle(angle_to_target - robot_front)
+                
+                if abs(angle_diff) > 0.3:
+                    turn = np.clip(angle_diff, -0.3, 0.3)
+                    self.controller.set_angular_target(yaw, turn)
+                else:
+                    move_dist = min(0.15, dist_to_waypoint)
+                    
+                    # continuously check paths
+                    if not self.costmap.is_path_safe(x, y, target_x, target_y):
+                        rospy.logwarn("Forward path blocked by obstacle/inflation! Re-planning.")
+                        self.behavior_state = "PLANNING"
+                        self.controller.state = "IDLE"
+                        return
+
+                    self.controller.set_linear_target(x, y, yaw, move_dist)
+            
+            cmd = self.controller.compute_command(x, y, yaw)
+            msg = Float32MultiArray(data=cmd)
             self.vel_pub.publish(msg)
             return
-        
-        # Compute wheel velocities
-        wheel_vels = self.controller.compute_velocity_command(
-            self.current_path, x, y, yaw
-        )
-        
-        if wheel_vels is None:
-            msg = Float32MultiArray()
-            msg.data = [0.0, 0.0, 0.0, 0.0]
-            self.vel_pub.publish(msg)
-            return
-        
-        # Publish velocities
-        msg = Float32MultiArray()
-        msg.data = wheel_vels
+
+        msg = Float32MultiArray(data=[0.0, 0.0, 0.0, 0.0])
         self.vel_pub.publish(msg)
-        
-        rospy.loginfo_throttle(
-            1,
-            "Following path - Velocities [FL FR RL RR]: [%.2f, %.2f, %.2f, %.2f]",
-            *wheel_vels
-        )
 
     def planning_loop(self, event):
-        """Planning loop - now runs at 2 Hz for faster updates."""
-        if not self.costmap.update():
-            return
+        if not self.costmap.update(): return
+        x, y, yaw = self.reader.pose
 
-        x, y, yaw = self.costmap.reader.pose
+        # check if goal has been discovered
+        if self.behavior_state == "FOLLOWING_PATH" and self.current_goal:
+            gx, gy = self.world_to_grid(self.current_goal[0], self.current_goal[1])
+            if gx and gy:
+                if self.costmap.costmap[gy, gx] != 50:
+                    rospy.loginfo("Frontier discovered dynamically (Not Unknown)! Re-planning.")
+                    self.behavior_state = "PLANNING"
+                    self.controller.state = "IDLE"
         
-        # Don't plan while spinning or escaping
-        if self.is_spinning or self.is_escaping:
-            return
-        
-        # Always try to update frontiers and path for real-time visualization
-        target, path_world = self.select_frontier_with_path(x, y)
-        
-        if target and path_world:
-            # Update path if we found a new/better one
-            self.current_goal = target
-            self.current_path = path_world
-            self.exploration_complete = False
-            rospy.loginfo_throttle(
-                2,
-                "Path updated to frontier: (%.2f, %.2f) with %d waypoints",
-                target[0], target[1], len(path_world)
-            )
-            self.publish_path(path_world)
-        else:
-            # No more frontiers found
-            if not self.exploration_complete:
-                rospy.loginfo("=" * 60)
-                rospy.loginfo("EXPLORATION COMPLETE - No more reachable frontiers!")
-                rospy.loginfo("=" * 60)
-                self.exploration_complete = True
-                # Stop the robot
-                msg = Float32MultiArray()
-                msg.data = [0.0, 0.0, 0.0, 0.0]
-                self.vel_pub.publish(msg)
-                # Clear current path
-                self.current_path = []
-                self.current_goal = None
+        if self.behavior_state == "PLANNING":
+            grid, w, h = self.get_grid()
+            rx, ry = self.world_to_grid(x, y)
+            all_frontiers = self.find_frontiers(grid, w, h, rx, ry)
+            
+            if not all_frontiers:
+                rospy.loginfo("NO FRONTIERS DETECTED. MISSION COMPLETE!")
+                self.clear_path() 
+                self.behavior_state = "COMPLETED"
+                return
 
+            target, path_world = self.select_frontier_with_path(x, y)
+            
+            if target and path_world:
+                self.current_goal = target
+                self.current_path = path_world
+                self.current_waypoint_idx = 0
+                self.behavior_state = "FOLLOWING_PATH"
+                rospy.loginfo("New path found: %d waypoints", len(path_world))
+                self.publish_path(path_world)
+                self.last_replan_time = rospy.Time.now()
+            else:
+                elapsed_since_plan = (rospy.Time.now() - self.last_replan_time).to_sec()
+                if elapsed_since_plan > 2.0:
+                    rospy.logwarn("No path found. Entering RECOVERY.")
+                    self.behavior_state = "RECOVERY"
+                    self.last_yaw = yaw 
+                    self.total_spin = 0
+                    self.controller.state = "IDLE"
 
 class PathPlanner:
     def __init__(self):
         self.reader = MapPoseReader()
         self.costmap = CostMap(self.reader)
-        self.navigator = Navigator(self.costmap)
-        rospy.Timer(rospy.Duration(0.1), self.update)  # 10 Hz for real-time updates
+        self.navigator = Navigator(self.costmap, self.reader)
+        rospy.Timer(rospy.Duration(0.1), self.update)
 
     def update(self, event):
-        if not self.reader.map_received:
-            return
-        if not self.reader.update_pose():
-            return
-        # Costmap updates in planning loop now
-
+        if not self.reader.map_received: return
+        self.reader.update_pose()
 
 def main():
     rospy.init_node('path_planner', anonymous=True)
-    rospy.loginfo("Path planner node started!")
-    
+    rospy.loginfo("Dynamic path planner started!")
     path_planner = PathPlanner()
-    
     rospy.spin()
 
 if __name__ == "__main__":
