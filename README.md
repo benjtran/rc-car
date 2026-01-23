@@ -4,12 +4,12 @@ A 4WD mobile robot buggy running SLAM for real time motion planning.
 
 <figure>
     <figcaption>Figure 1: Isometric View of Robot</figcaption>
-    <img src="images\isometric.jpg" width="350" alt="Iris Plot">
+    <img src="images\isometric.jpg" width="500" alt="Iris Plot">
 </figure>
 
 <figure>
     <figcaption>Figure 2: Demo of Robot in Random Environment</figcaption>
-    <img src="images\demo.gif" width="350" alt="Iris Plot">
+    <img src="images\demo.gif" width="500" alt="Iris Plot">
 </figure>
 
 Note: This project was supposed to be an RC car, hence the repo name. I reworked it to see if I could make it autonomous!
