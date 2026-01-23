@@ -3,13 +3,13 @@
 A 4WD mobile robot buggy running SLAM for real time motion planning.
 
 <figure>
-    <img src="images\isometric.jpg" width="350" alt="Iris Plot">
     <figcaption>Figure 1: Isometric View of Robot</figcaption>
+    <img src="images\isometric.jpg" width="350" alt="Iris Plot">
 </figure>
 
 <figure>
-    <img src="images\demo.gif" width="350" alt="Iris Plot">
     <figcaption>Figure 2: Demo of Robot in Random Environment</figcaption>
+    <img src="images\demo.gif" width="350" alt="Iris Plot">
 </figure>
 
 Note: This project was supposed to be an RC car, hence the repo name. I reworked it to see if I could make it autonomous!
@@ -21,8 +21,8 @@ Note: This project was supposed to be an RC car, hence the repo name. I reworked
 The chassis and body were custom-designed in Autodesk Inventor. The wheels were sourced from Bambu Studio. All components were 3D printed with PLA.
 
 <figure>
-    <img src="images\cad.PNG" width="250" alt="Iris Plot">
     <figcaption>Figure 3: Isometric View of Chassis and Body</figcaption>
+    <img src="images\cad.PNG" width="250" alt="Iris Plot">
 </figure>
 
 ### Electrical:
